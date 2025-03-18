@@ -14,9 +14,9 @@ public struct CollectionPolicy<phantom T> has key {
   id: UID,
   name: String,
   description: String,
-  layers: VecSet<LayerInfo<T>>,
-  items: VecSet<ItemInfo<T>>,
-  properties: VecSet<PropertyInfo<T>>,
+  layers: VecSet<LayerType<T>>,
+  items: VecSet<ItemType<T>>,
+  properties: VecSet<PropertyType<T>>,
   rules: VecSet<TypeName>,
   balance: Balance<SUI>,
 }
@@ -26,21 +26,21 @@ public struct CollectionPolicyCap<phantom T> has key, store {
   `for`: ID
 }
 
-public struct LayerInfo<phantom T> has copy, store, drop {
+public struct LayerType<phantom T> has copy, store, drop {
   name: String,
   description: String,
   order: u64,
 }
 
-public struct ItemInfo<phantom T> has copy, store, drop {
-  layer: LayerInfo<T>,
+public struct ItemType<phantom T> has copy, store, drop {
+  layer: LayerType<T>,
   name: String,
   description: String,
   image_url: String,
 }
 
-public struct PropertyInfo<phantom T> has copy, store, drop {
-  layer: LayerInfo<T>,
+public struct PropertyType<phantom T> has copy, store, drop {
+  layer: LayerType<T>,
   name: String,
   description: String,
 }
@@ -60,44 +60,43 @@ public struct CollectionRequest<phantom T> {
 // 이건 add_layer 할 때 생성 
 public struct Layer<phantom T> has key, store {
   id: UID,
-  info: LayerInfo<T>,
+  `type`: LayerType<T>,
   item_socket: Option<Item<T>>
 }
 
 // 이건 add_item 할 때 생성
 public struct Item<phantom T> has key, store {
   id: UID,
-  info: ItemInfo<T>,
+  `type`: ItemType<T>,
   properties: vector<Property<T>>,
 }
 
 // 이건 add_property 할 때 생성
 public struct Property<phantom T> has store {
-  info: PropertyInfo<T>,
+  `type`: PropertyType<T>,
   value: u64,
 }
 
+public struct RuleKey<phantom T: drop> has copy, drop, store {}
 
 public fun new<T>(pub: &Publisher, ctx: &mut TxContext){}
 
-public fun add_rule<T>(policy: &mut CollectionPolicy<T>) {}
+public fun add_rule<T, Rule: drop, Config: store + drop>(
+    _: Rule,
+    policy: &mut CollectionPolicy<T>,
+    cap: &CollectionPolicyCap<T>,
+    cfg: Config,
+) {
+    // assert!(object::id(policy) == cap.policy_id, ENotOwner);
+    // assert!(!has_rule<T, Rule>(policy), ERuleAlreadySet);
+    dynamic_field::add(&mut policy.id, RuleKey<Rule> {}, cfg);
+    policy.rules.insert(type_name::get<Rule>())
+}
 
-// public fun add_rule<T, Rule: drop, Config: store + drop>(
-//     _: Rule,
-//     policy: &mut TransferPolicy<T>,
-//     cap: &TransferPolicyCap<T>,
-//     cfg: Config,
-// ) {
-//     assert!(object::id(policy) == cap.policy_id, ENotOwner);
-//     assert!(!has_rule<T, Rule>(policy), ERuleAlreadySet);
-//     dynamic_field::add(&mut policy.id, RuleKey<Rule> {}, cfg);
-//     policy.rules.insert(type_name::get<Rule>())
-// }
+public fun add_layer_type<T>(policy: &mut CollectionPolicy<T>, name: String, description: String, order: u64) {}
 
-public fun add_layer<T>(policy: &mut CollectionPolicy<T>) {}
+public fun add_item_type<T>(policy: &mut CollectionPolicy<T>, layer:LayerType<T>, name: String, description: String, image_url: String) {}
 
-public fun add_item<T>(policy: &mut CollectionPolicy<T>) {}
-
-public fun add_property<T>(policy: &mut CollectionPolicy<T>) {}
+public fun add_property_type<T>(policy: &mut CollectionPolicy<T>, layer: LayerType<T>, name: String, description: String) {}
 
 
