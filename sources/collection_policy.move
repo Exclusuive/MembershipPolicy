@@ -3,17 +3,16 @@ module exclusuive::collection_policy;
 use std::type_name::{Self, TypeName};
 use std::string::{String};
 
-use sui::package::{Publisher};
-use sui::balance::{Balance};
+use sui::package::{Self, Publisher};
+use sui::balance::{Self, Balance};
 use sui::sui::{SUI};
-use sui::vec_set::{VecSet};
+use sui::vec_set::{Self, VecSet};
 use sui::dynamic_field;
 
 // add collection property? collection info?
+// Shared
 public struct CollectionPolicy<phantom T> has key {
   id: UID,
-  name: String,
-  description: String,
   layers: VecSet<LayerType<T>>,
   items: VecSet<ItemType<T>>,
   properties: VecSet<PropertyType<T>>,
@@ -21,11 +20,13 @@ public struct CollectionPolicy<phantom T> has key {
   balance: Balance<SUI>,
 }
 
+// Owned
 public struct CollectionPolicyCap<phantom T> has key, store {
   id: UID,
-  `for`: ID
+  policy_id: ID
 }
 
+// Types
 public struct LayerType<phantom T> has copy, store, drop {
   name: String,
   description: String,
@@ -58,6 +59,7 @@ public struct CollectionRequest<phantom T> {
 // }
 
 // 이건 add_layer 할 때 생성 
+// owned by df
 public struct Layer<phantom T> has key, store {
   id: UID,
   `type`: LayerType<T>,
@@ -65,6 +67,7 @@ public struct Layer<phantom T> has key, store {
 }
 
 // 이건 add_item 할 때 생성
+// owned by df
 public struct Item<phantom T> has key, store {
   id: UID,
   `type`: ItemType<T>,
@@ -72,6 +75,7 @@ public struct Item<phantom T> has key, store {
 }
 
 // 이건 add_property 할 때 생성
+// owned by df
 public struct Property<phantom T> has store {
   `type`: PropertyType<T>,
   value: u64,
@@ -79,7 +83,17 @@ public struct Property<phantom T> has store {
 
 public struct RuleKey<phantom T: drop> has copy, drop, store {}
 
-public fun new<T>(pub: &Publisher, ctx: &mut TxContext){}
+public fun new<T>(pub: &Publisher, ctx: &mut TxContext): (CollectionPolicy<T>, CollectionPolicyCap<T>){
+  assert!(package::from_package<T>(pub), 0);
+
+  let id = object::new(ctx);
+  let policy_id = id.to_inner();
+  // event::emit(CollectionPolicyCreated<T> { id: policy_id });
+  (
+      CollectionPolicy { id, layers: vec_set::empty(), items: vec_set::empty(), properties: vec_set::empty(), rules: vec_set::empty(), balance: balance::zero() },
+      CollectionPolicyCap { id: object::new(ctx), policy_id },
+  )
+}
 
 public fun add_rule<T, Rule: drop, Config: store + drop>(
     _: Rule,
