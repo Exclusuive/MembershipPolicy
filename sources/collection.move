@@ -70,6 +70,7 @@ public struct Config has store, copy, drop {
 public struct Base has key, store {
   id: UID,
   `type`: BaseType,
+  name: String,
   img_url: String
 }
 
@@ -123,7 +124,8 @@ fun init(otw: COLLECTION, ctx: &mut TxContext) {
 
   let mut display = display::new<Base>(&publisher, ctx);
   display.add(b"id".to_string(), b"{id}".to_string());
-  display.add(b"name".to_string(), b"{name}".to_string());
+  display.add(b"name".to_string(), b"{type.name}".to_string());
+  display.add(b"collection".to_string(), b"{type.collection_id}".to_string());
   // display.add(b"description".to_string(), b"{base.description}".to_string());
   display.add(b"img_url".to_string(), b"{img_url}".to_string());
   display.update_version();
@@ -196,6 +198,7 @@ public fun new_base(collection: &Collection, cap: &CollectionCap, img_url: Strin
   let mut base = Base {
     id: object::new(ctx),
     `type`: collection.base_type,
+    name: collection.base_type.name,
     img_url
   };
 
