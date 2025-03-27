@@ -137,6 +137,7 @@ public fun add_layer_type<T: key, LayerType: store + drop, Config: store + drop>
     assert!(!has_layer<T, LayerType, Config>(policy), ERuleAlreadySet);
 
     dynamic_field::add<LayerKey<T, LayerType, Config>, LayerConfig<LayerType, Config>>( &mut policy.id, LayerKey<T, LayerType, Config> {}, LayerConfig{order, `type`, cfg});
+    policy.update_version_policy(cap);
 }
 
 public fun add_item_type<T: key, LayerType: store + drop, Config: store + drop>(
@@ -152,6 +153,7 @@ public fun add_item_type<T: key, LayerType: store + drop, Config: store + drop>(
 
     let item_config = ItemConfig<T, LayerType, Config>{`type`, item_type, img_url, cfg};
     dynamic_field::add(&mut policy.id, ItemKey<T, LayerType, Config> {item_type}, item_config);
+    policy.update_version_policy(cap);
 }
 
 public fun add_property_type<T: key, PropertyType: store + drop, Config: store + drop>(
@@ -167,6 +169,7 @@ public fun add_property_type<T: key, PropertyType: store + drop, Config: store +
 
     let property_config = PropertyConfig<T, PropertyType, Config>{`type`, cfg, min, max};
     dynamic_field::add(&mut policy.id, PropertyKey<T, PropertyType, Config> {}, property_config);
+    policy.update_version_policy(cap);
 }
 
 public fun add_rule<T: key, Rule: drop, CustomConfig: store + drop>(
@@ -179,6 +182,7 @@ public fun add_rule<T: key, Rule: drop, CustomConfig: store + drop>(
     // assert!(!has_rule<T, Rule>(policy), ERuleAlreadySet);
     // dynamic_field::add(&mut policy.id, RuleKey<T, Rule> {}, cfg);
     // policy.rules.insert(type_name::get<RuleKey<T, Rule>>())
+    policy.update_version_policy(cap);
 }
 
 // -------------------------- Create Functions
@@ -210,6 +214,9 @@ public fun has_property<T: key, PropertyType: store + drop, Config: store + drop
 // }
 
 // ============================= Public Package Functions
+public (package) fun update_version_policy<T: key>(policy: &mut MembershipPolicy<T>, cap: &MembershipPolicyCap<T>) {
+  policy.version = policy.version + 1;
+}
 public (package) fun get_struct_name(self: TypeName): String {
     let ascii_colon: u8 = 58;
     let ascii_less_than: u8 = 60;
