@@ -156,6 +156,10 @@ public fun add_layer_to_membership<T: key, LayerType: drop, LConfig: store + cop
 ) {
     assert!(has_layer<T, LayerType>(policy), ENotHasLayer);
 
+    if (dynamic_field::exists_<LayerTypeKey<LayerType>>(&membership.id, LayerTypeKey<LayerType>{})){
+      return
+    };
+
     let cfg = dynamic_field::borrow<LayerTypeKey<LayerType>, LayerConfig<LayerType, LConfig>>( &policy.id, LayerTypeKey<LayerType> {});
     let layer = Layer<T, LayerType, LConfig, IConfig>{item_socket: option::none(),cfg: *cfg};
     dynamic_field::add<LayerTypeKey<LayerType>, Layer<T, LayerType, LConfig, IConfig>>(&mut membership.id, LayerTypeKey<LayerType>{}, layer);
