@@ -14,6 +14,7 @@ const ENotOwner: u64 = 100;
 const ERuleAlreadySet: u64 = 101;
 const ENotHasLayer: u64 = 102;
 const ENotCorrectMembershipPolicy: u64 = 104;
+const EIncorrectProeprtyValue: u64 = 105;
 
 public struct MembershipPolicy<phantom T: key> has key, store {
   id: UID,
@@ -88,7 +89,7 @@ public struct Item<phantom T: key, phantom LayerType: drop, Config: store + copy
   id: UID,
   cfg: ItemConfig<LayerType, Config>,
 }
-
+// Property는 Item에만 있는게 아니라, Membership에도 넣는게 놓을까
 public struct Property<phantom T: key, phantom PropertyType: drop, Config: store + copy + drop> has store {
   value: u64,
   cfg: PropertyConfig<PropertyType, Config>
@@ -156,7 +157,28 @@ public fun add_layer_to_membership<T: key, LayerType: drop, LConfig: store + cop
     assert!(has_layer<T, LayerType>(policy), ENotHasLayer);
 
     let cfg = dynamic_field::borrow<LayerTypeKey<LayerType>, LayerConfig<LayerType, LConfig>>( &policy.id, LayerTypeKey<LayerType> {});
-    dynamic_field::add<LayerTypeKey<LayerType>, Layer<T, LayerType, LConfig, IConfig>>(&mut membership.id, LayerTypeKey<LayerType>{}, Layer{item_socket: option::none(),cfg: *cfg});
+    let layer = Layer<T, LayerType, LConfig, IConfig>{item_socket: option::none(),cfg: *cfg};
+    dynamic_field::add<LayerTypeKey<LayerType>, Layer<T, LayerType, LConfig, IConfig>>(&mut membership.id, LayerTypeKey<LayerType>{}, layer);
+}
+
+public fun add_property_to_membership<T: key, PropertyType: drop, Config: store + copy + drop>(
+    membership: &mut Membership<T>,
+    policy: &MembershipPolicy<T>,
+    _: PropertyType,
+    value: u64,
+) {
+    assert!(has_property<T, PropertyType>(policy), ENotHasLayer);
+
+    let cfg = dynamic_field::borrow<PropertyTypeKey<PropertyType>, PropertyConfig<PropertyType, Config>>( &policy.id, PropertyTypeKey<PropertyType> {});
+    assert!(cfg.min <= value && value <= cfg.max, EIncorrectProeprtyValue);
+
+    if(dynamic_field::exists_<PropertyTypeKey<PropertyType>>(&membership.id, PropertyTypeKey<PropertyType>{})){
+      let old_property = dynamic_field::remove<PropertyTypeKey<PropertyType>, Property<T, PropertyType, Config>>(&mut membership.id, PropertyTypeKey<PropertyType>{});
+      let Property {value:_, cfg: _} = old_property;
+    };
+
+    let property = Property<T, PropertyType, Config>{value, cfg: *cfg};
+    dynamic_field::add<PropertyTypeKey<PropertyType>, Property<T, PropertyType, Config>>(&mut membership.id, PropertyTypeKey<PropertyType>{}, property);
 }
 
 // ===================================== Admin Functions
