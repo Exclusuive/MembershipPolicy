@@ -25,11 +25,34 @@ public struct Collection has key, store {
   version: u64,
 }
 
-
-// Owned
 public struct CollectionCap has key, store {
   id: UID,
   collection_id: ID
+}
+
+public struct Supplyer<Product: store> has key, store {
+  id: UID,
+  collection_id: ID,
+  selections: vector<Selection<Product>>,
+  size: u64,
+  balance: Balance<SUI>,
+}
+
+public struct Selection<Product: store> has store {
+  number: u64,
+  conditions: vector<Condition>,
+  price: u64,
+  product: Product
+}
+
+public struct Condition has store, copy, drop {
+  ticket_type: TicketType,
+  requirement: u64,
+}
+
+public struct SupplyerCap has key, store {
+  id: UID,
+  machine_id: ID
 }
 
 // Collection Metadata 
@@ -86,7 +109,6 @@ public struct Property has store {
 
 public struct Ticket has store {
   `type`: TicketType, 
-  value: u64
 }
 
 // ==================================================
@@ -195,11 +217,11 @@ public fun new_property(collection: &Collection, cap: &CollectionCap, `type`: St
   Property {`type`: *property_type, value}
 }
 
-public fun new_ticket(collection: &Collection, cap: &CollectionCap, `type`: String, value: u64): Ticket { 
+public fun new_ticket(collection: &Collection, cap: &CollectionCap, `type`: String): Ticket { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
   let ticket_type = dynamic_field::borrow<TypeKey<TicketType>, TicketType>(&collection.id, TypeKey<TicketType>{`type`});
-  Ticket {`type`: *ticket_type, value}
+  Ticket {`type`: *ticket_type}
 }
 
 
