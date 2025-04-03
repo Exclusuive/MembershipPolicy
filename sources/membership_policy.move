@@ -5,9 +5,10 @@ use std::string::{String};
 
 use sui::package::{Self, Publisher};
 use sui::balance::{Self, Balance};
+use sui::coin::{Coin};
 use sui::sui::{SUI};
 use sui::dynamic_field;
-// use sui::dynamic_object_field;
+use sui::dynamic_object_field;
 use sui::vec_map::{Self, VecMap};
 use sui::vec_set::{Self, VecSet};
 // use sui::bag::{Self, Bag};
@@ -17,7 +18,10 @@ const ENotOwner: u64 = 100;
 const ERuleAlreadySet: u64 = 101;
 const ENotHasLayer: u64 = 102;
 const ENotCorrectMembershipPolicy: u64 = 104;
-// const EIncorrectProeprtyValue: u64 = 105;
+const EIllegalRule: u64 = 105;
+const ENotCorrectVendingMachine: u64 = 106;
+const ENotEnoughPaid: u64 = 107;
+
 
 public struct MembershipPolicy<phantom T: key> has key, store {
   id: UID,
@@ -34,7 +38,7 @@ public struct MembershipPolicyCap<phantom T: key> has key, store {
 public struct VendingMachine<phantom T: key> has key, store {
   id: UID,
   policy_id: ID,
-  selections: VecMap<u64, Selection>,
+  selections: vector<Selection>,
   size: u64,
   balance: Balance<SUI>,
 }
@@ -47,11 +51,12 @@ public struct VendingMachineCap<phantom T: key> has key, store {
 // 이게 Inputs, 즉 Rules, 즉, Condition
 public struct Selection has store {
   conditions: vector<Condition>,
+  price: u64,
   product: TypeName
 }
 
-public struct Condition has store {
-  ticket_types: TypeName,
+public struct Condition has store, copy, drop {
+  ticket_type: TypeName,
   requirement: u64,
 }
 
@@ -78,6 +83,9 @@ public struct ConfigKey has store, copy, drop{} // 이건 item에
 
 // public struct VendingMachineInputKey<phantom TiketType: drop> has store, copy, drop{} // 이건 item에
 // public struct VendingMachineOutputKey has store, copy, drop{} // 이건 item에
+public struct ProductKey has store, copy, drop{
+  selection_number: u64
+}
 
 
 // ============================================= 실제 Data & Object Structs
@@ -109,9 +117,8 @@ public struct Item<phantom LayerType: drop> has key, store {
 }
 
 // 생산 품 // 요건 Item이랑 Membership에 장착하는 건데, 하나만 장착할 수 있고, 한 번만 장착 할 수 있어
-public struct PropertyValue<phantom PropertyType: drop, Config: store + copy + drop> has store {
+public struct PropertyValue<phantom PropertyType: drop> has store {
   value: u64,
-  cfg: Config
 }
 
 // 생산 품
@@ -151,7 +158,8 @@ public fun new_vending_machine<T: key>(
       VendingMachine<T> {
         id,
         policy_id: object::id(policy),
-        selections: vec_map::empty<u64, Selection>(),
+        selections: vector<Selection>[],
+        // selections: vec_map::empty<u64, Selection>(),
         size: 0,
         balance: balance::zero()
       },
@@ -192,7 +200,6 @@ public fun add_item_to_membership<T: key, LayerType: drop, Config: store + copy 
     membership: &mut Membership<T>,
     item: Item<LayerType>,
     policy: &MembershipPolicy<T>,
-    _: LayerType,
 ) {
     assert!(has_layer<T, LayerType>(policy), ENotHasLayer);
 
@@ -220,6 +227,26 @@ public fun add_item_to_membership<T: key, LayerType: drop, Config: store + copy 
     item_socket.socket.fill(item);
     dynamic_field::add(&mut membership.id, LayerKey<LayerType>{}, item_socket);
 }
+
+public fun add_ticket_to_membership<T: key, TicketType: drop>(
+    membership: &mut Membership<T>,
+    ticket: Ticket<TicketType>,
+) {
+    if (!dynamic_field::exists_(&membership.id, TicketKey<TicketType>{})){
+      dynamic_field::add<TicketKey<TicketType>, vector<Ticket<TicketType>>>(&mut membership.id, TicketKey<TicketType>{}, vector<Ticket<TicketType>>[]);
+    };
+
+    let ticket_bag = dynamic_field::borrow_mut<TicketKey<TicketType>, vector<Ticket<TicketType>>>(&mut membership.id, TicketKey<TicketType>{});
+    ticket_bag.push_back(ticket);
+}
+
+public fun pop_ticket_from_membership<T: key, TicketType: drop>(
+    membership: &mut Membership<T>
+): Ticket<TicketType> {
+    let ticket_bag = dynamic_field::borrow_mut<TicketKey<TicketType>, vector<Ticket<TicketType>>>(&mut membership.id, TicketKey<TicketType>{});
+    ticket_bag.pop_back()
+}
+
 
 public fun attatch_property_to_item<LayerType: drop, PropertyType: drop, Config: store + copy + drop>(
     item: &mut Item<LayerType>,
@@ -292,17 +319,95 @@ public (package) fun new_item<LayerType: drop, Config: store + copy + drop>(
     item
 }
 
-public (package) fun new_property_value<PropertyType: drop, Config: store + copy + drop>(
+public (package) fun new_property_value<PropertyType: drop>(
     value: u64,
-    cfg: Config,
-): PropertyValue<PropertyType, Config> {
-  PropertyValue{ value, cfg }
+): PropertyValue<PropertyType> {
+  PropertyValue{value}
 }
 
 public (package) fun new_ticket<TicketType: drop>(
     ctx: &mut TxContext,
 ): Ticket<TicketType> {
   Ticket<TicketType> {id: object::new(ctx)}
+}
+
+
+public (package) fun new_selection<Product>(price: u64): Selection {
+  Selection{
+    conditions: vector<Condition>[],
+    price,
+    product: type_name::get<Product>()
+  }
+}
+
+public (package) fun add_condition_to_selection<TicketType: drop>(selection: &mut Selection, requirement: u64) {
+  selection.conditions.push_back(Condition{
+    ticket_type: type_name::get<TicketType>(),
+    requirement
+  })
+} 
+
+public fun add_selection_to_machine<T: key>(machine: &mut VendingMachine<T>, cap: &VendingMachineCap<T>, selection: Selection) {
+  assert!(object::id(machine) == cap.machine_id, ENotOwner);
+
+  machine.selections.push_back(selection);
+  machine.size = machine.selections.length();
+}
+
+public fun add_product_to_machine<T: key, Product: store>(machine: &mut VendingMachine<T>, cap: &VendingMachineCap<T>, selection_number: u64, product: Product) {
+  assert!(object::id(machine) == cap.machine_id, ENotOwner);
+  machine.selections.borrow(selection_number);
+
+  if (!dynamic_field::exists_(&machine.id, ProductKey{selection_number})) {
+    dynamic_field::add(&mut machine.id, ProductKey{selection_number}, vector<Product>[]);
+  };
+
+  dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut machine.id, ProductKey{selection_number})
+  .push_back(product);
+}
+
+public fun new_request<T: key>(machine: &VendingMachine<T>, selection_number: u64): SelectRequest<T> {
+  SelectRequest {
+    machine_id: object::id(machine),
+    selection_number,
+    paid: 0,
+    receipts: vec_map::empty<TypeName, u64>()
+  }
+}
+
+public fun add_balance_to_machine<T: key>(machine: &mut VendingMachine<T>, request: &mut SelectRequest<T>, coin: Coin<SUI> ) {
+  assert!(object::id(machine) == request.machine_id, ENotCorrectVendingMachine);
+  request.paid = request.paid + coin.value();
+  machine.balance.join(coin.into_balance());
+}
+
+public fun confirm_request<T: key, Product: store>(
+    machine: &mut VendingMachine<T>,
+    request: SelectRequest<T>,
+): (ID, u64, Product) {
+    let SelectRequest { machine_id, selection_number, paid, receipts } = request;
+
+    let selection = &machine.selections[selection_number];
+
+    assert!(selection.price == paid, ENotEnoughPaid);
+
+    let mut completed = selection.conditions;
+    let mut total = selection.conditions.length();
+
+    while (total > 0) {
+        let condition = completed.pop_back();
+
+        let ticket_type = condition.ticket_type;
+        let burned_tickets = *receipts.get(&ticket_type);
+        assert!(burned_tickets == condition.requirement, EIllegalRule);
+
+        total = total - 1;
+    };
+
+    let product = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut machine.id, ProductKey{selection_number})
+    .pop_back();
+
+    (machine_id, paid, product)
 }
 
 // public fun get_item_from_vendinmachine(){}
