@@ -8,9 +8,9 @@ use sui::balance::{Self, Balance};
 use sui::sui::{SUI};
 use sui::dynamic_field;
 // use sui::dynamic_object_field;
-use sui::vec_map::{VecMap};
+use sui::vec_map::{Self, VecMap};
 use sui::vec_set::{Self, VecSet};
-use sui::bag::{Self, Bag};
+// use sui::bag::{Self, Bag};
 // use sui::transfer_policy::{Self, RuleKey};
 
 const ENotOwner: u64 = 100;
@@ -31,6 +31,36 @@ public struct MembershipPolicyCap<phantom T: key> has key, store {
   policy_id: ID
 }
 
+public struct VendingMachine<phantom T: key> has key, store {
+  id: UID,
+  policy_id: ID,
+  selections: VecMap<u64, Selection>,
+  size: u64,
+  balance: Balance<SUI>,
+}
+
+public struct VendingMachineCap<phantom T: key> has key, store {
+  id: UID,
+  machine_id: ID
+}
+
+// 이게 Inputs, 즉 Rules, 즉, Condition
+public struct Selection has store {
+  conditions: vector<Condition>,
+  product: TypeName
+}
+
+public struct Condition has store {
+  ticket_types: TypeName,
+  requirement: u64,
+}
+
+public struct SelectRequest<phantom T: key> {
+  machine_id: ID,
+  selection_number: u64,
+  paid: u64,
+  receipts: VecMap<TypeName, u64>,
+}
 
 // ============================================= Key 
 
@@ -105,6 +135,28 @@ public fun new<T: key>(pub: &Publisher, ctx: &mut TxContext): (MembershipPolicy<
         },
       MembershipPolicyCap<T> { id: object::new(ctx), policy_id },
   )
+}
+
+public fun new_vending_machine<T: key>(
+    policy: &MembershipPolicy<T>,
+    cap: &MembershipPolicyCap<T>,
+    ctx: &mut TxContext
+): (VendingMachine<T>, VendingMachineCap<T>){
+    assert!(object::id(policy) == cap.policy_id, ENotOwner);
+
+    let id = object::new(ctx);
+    let machine_id = id.to_inner();
+
+    (
+      VendingMachine<T> {
+        id,
+        policy_id: object::id(policy),
+        selections: vec_map::empty<u64, Selection>(),
+        size: 0,
+        balance: balance::zero()
+      },
+      VendingMachineCap<T> { id: object::new(ctx), machine_id }
+    )
 }
 
 // ===================================== Membership User Function
