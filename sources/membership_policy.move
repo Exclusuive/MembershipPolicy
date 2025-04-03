@@ -1,109 +1,95 @@
 module exclusuive::membership_policy;
 
-use std::type_name::{TypeName};
+use std::type_name::{Self, TypeName};
 use std::string::{String};
 
 use sui::package::{Self, Publisher};
 use sui::balance::{Self, Balance};
 use sui::sui::{SUI};
 use sui::dynamic_field;
-use sui::dynamic_object_field;
+// use sui::dynamic_object_field;
+use sui::vec_map::{VecMap};
+use sui::vec_set::{Self, VecSet};
+use sui::bag::{Self, Bag};
 // use sui::transfer_policy::{Self, RuleKey};
 
 const ENotOwner: u64 = 100;
 const ERuleAlreadySet: u64 = 101;
 const ENotHasLayer: u64 = 102;
 const ENotCorrectMembershipPolicy: u64 = 104;
-const EIncorrectProeprtyValue: u64 = 105;
+// const EIncorrectProeprtyValue: u64 = 105;
 
 public struct MembershipPolicy<phantom T: key> has key, store {
   id: UID,
   balance: Balance<SUI>,
+  layer_types: VecSet<TypeName>,
   version: u16,
 }
+
 public struct MembershipPolicyCap<phantom T: key> has key, store {
   id: UID,
   policy_id: ID
 }
 
-public struct Condition<phantom T: key> has key, store {
-  id: UID,
-  policy_id: ID
-}
 
-public struct ConditionCap<phantom T: key> has key, store {
-  id: UID,
-  condition_id: ID
-}
+// ============================================= Key 
 
-
-// ============================================= Key & Config
 public struct MembershipKey has store, copy, drop{}
 
-public struct LayerTypeKey<phantom LayerType: drop> has store, copy, drop{}
+public struct LayerKey<phantom LayerType: drop> has store, copy, drop{} // 이건 Membership 에
 
-// ItemKey {item_type: "type1"} 과 ItemKey {item_type: "type1"} 가 '동알하게 인식 되면 => OK' '다르게 인식 되면 => Not OK'
-public struct ItemTypeKey<phantom LayerType: drop> has store, copy, drop {
-  item_type: String
-}
+public struct ItemBagKey<phantom LayerType: drop> has store, copy, drop{} // 이건 Membership에
 
-public struct PropertyTypeKey<phantom PropertyType: drop> has store, drop, copy {}
+public struct PropertyKey<phantom PropertyType: drop> has store, drop, copy {} //이건 Item에
 
-public struct LayerConfig<phantom LayerType: drop, Config: store + copy + drop> has store, copy, drop {
-  order: u64,
-  cfg: Config,
-}
+public struct TicketKey<phantom TicketType: drop> has store, drop, copy {}
 
-public struct ItemConfig<phantom LayerType: drop, Config: store + copy + drop> has store, copy, drop {
-  item_type: String,
-  img_url: String,
-  cfg: Config,
-}
+public struct ConfigKey has store, copy, drop{} // 이건 item에
 
-public struct PropertyConfig<phantom PropertyType: drop, Config: store + copy + drop> has store, copy, drop {
-  min: u64,
-  max: u64,
-  cfg: Config,
-}
+// public struct VendingMachineInputKey<phantom TiketType: drop> has store, copy, drop{} // 이건 item에
+// public struct VendingMachineOutputKey has store, copy, drop{} // 이건 item에
+
 
 // ============================================= 실제 Data & Object Structs
-
-// Object
-public struct Ticket<phantom T: key, phantom TicketType: drop> has key, store {
-  id: UID
-}
-
 // Object
 public struct Membership<phantom T: key> has key, store {
   id: UID,
   policy_id: ID
 }
 
-public struct Layer<phantom T: key, phantom LayerType: drop, LConfig: store + copy + drop, IConfig: store + copy + drop> has store {
-  item_socket: Option<Item<T, LayerType, IConfig>>,
-  cfg: LayerConfig<LayerType, LConfig>,
+// Layer만 policy에 추가 되는 타입 데이터
+public struct Layer<phantom LayerType: drop, Config: store + copy + drop> has store {
+  cfg: Config,
 }
 
-// Object
-public struct Item<phantom T: key, phantom LayerType: drop, Config: store + copy + drop> has key, store {
+public struct Property<phantom PropertyType: drop, Config: store + copy + drop> has store {
+  cfg: Config
+}
+
+public struct ItemSocket<phantom LayerType: drop, Config: store + copy + drop> has store {
+  socket: Option<Item<LayerType>>,
+  layer: Layer<LayerType, Config>
+}
+
+// 생산 품
+public struct Item<phantom LayerType: drop> has key, store {
   id: UID,
-  cfg: ItemConfig<LayerType, Config>,
+  item_type: String,
+  img_url: String,
 }
-// Property는 Item에만 있는게 아니라, Membership에도 넣는게 놓을까
-public struct Property<phantom T: key, phantom PropertyType: drop, Config: store + copy + drop> has store {
+
+// 생산 품 // 요건 Item이랑 Membership에 장착하는 건데, 하나만 장착할 수 있고, 한 번만 장착 할 수 있어
+public struct PropertyValue<phantom PropertyType: drop, Config: store + copy + drop> has store {
   value: u64,
-  cfg: PropertyConfig<PropertyType, Config>
+  cfg: Config
 }
 
-// =========================================
-
-// public struct CollectionRequest<phantom T: key> {}
-
-// public struct ConvertRequest<phantom T: key> {}
-
+// 생산 품
+public struct Ticket<phantom TicketType: drop> has key, store {
+  id: UID,
+}
 
 // -------------------------- Admin Functions
-
 public fun new<T: key>(pub: &Publisher, ctx: &mut TxContext): (MembershipPolicy<T>, MembershipPolicyCap<T>){
   assert!(package::from_package<T>(pub), 0);
 
@@ -114,20 +100,22 @@ public fun new<T: key>(pub: &Publisher, ctx: &mut TxContext): (MembershipPolicy<
       MembershipPolicy<T> { 
         id, 
         balance: balance::zero(),
+        layer_types: vec_set::empty<TypeName>(),
         version: 0,
         },
       MembershipPolicyCap<T> { id: object::new(ctx), policy_id },
   )
 }
 
-// ===================================== Admin Package Functions for Membership User
+// ===================================== Membership User Function
 
 public fun add_membership<T: key>(
     self: &mut UID,
     policy: &MembershipPolicy<T>,
     ctx: &mut TxContext,
 ){
-  dynamic_field::add(self, MembershipKey{}, Membership<T>{id: object::new(ctx), policy_id: object::id(policy)});
+  let membership = Membership<T>{id: object::new(ctx), policy_id: object::id(policy)};
+  dynamic_field::add(self, MembershipKey{}, membership);
 }
 
 public fun borrow_membership<T: key>(
@@ -148,70 +136,59 @@ public fun borrow_mut_membership<T: key>(
   membership
 }
 
-// LayerType 당 하나 씩 구현해야 함
-public fun add_layer_to_membership<T: key, LayerType: drop, LConfig: store + copy + drop, IConfig: store + copy + drop>(
+public fun add_item_to_membership<T: key, LayerType: drop, Config: store + copy + drop>(
     membership: &mut Membership<T>,
+    item: Item<LayerType>,
     policy: &MembershipPolicy<T>,
     _: LayerType,
 ) {
     assert!(has_layer<T, LayerType>(policy), ENotHasLayer);
 
-    if (dynamic_field::exists_<LayerTypeKey<LayerType>>(&membership.id, LayerTypeKey<LayerType>{})){
-      return
+    if (!dynamic_field::exists_(&membership.id, ItemBagKey<LayerType>{})){
+      dynamic_field::add(&mut membership.id, ItemBagKey<LayerType>{}, vector<Item<LayerType>>[]);
     };
 
-    let cfg = dynamic_field::borrow<LayerTypeKey<LayerType>, LayerConfig<LayerType, LConfig>>( &policy.id, LayerTypeKey<LayerType> {});
-    let layer = Layer<T, LayerType, LConfig, IConfig>{item_socket: option::none(),cfg: *cfg};
-    dynamic_field::add<LayerTypeKey<LayerType>, Layer<T, LayerType, LConfig, IConfig>>(&mut membership.id, LayerTypeKey<LayerType>{}, layer);
+    if (!dynamic_field::exists_(&membership.id, LayerKey<LayerType>{})){
+      let layer = dynamic_field::borrow<LayerKey<LayerType>, Layer<LayerType, Config>>(&policy.id, LayerKey<LayerType>{});
+      let item_socket = ItemSocket{
+        socket: option::none(), 
+        layer: Layer<LayerType, Config>{cfg: layer.cfg}
+      };
+      dynamic_field::add(&mut membership.id, LayerKey<LayerType>{}, item_socket);
+    };
+
+    let mut item_socket = dynamic_field::remove<LayerKey<LayerType>, ItemSocket<LayerType, Config>>(&mut membership.id, LayerKey<LayerType>{});
+
+    if (item_socket.socket.is_some()) {
+      let old_item = item_socket.socket.extract();
+      let item_bag = dynamic_field::borrow_mut<ItemBagKey<LayerType>, vector<Item<LayerType>>>(&mut membership.id, ItemBagKey{});
+      item_bag.push_back(old_item);
+    };
+
+    item_socket.socket.fill(item);
+    dynamic_field::add(&mut membership.id, LayerKey<LayerType>{}, item_socket);
 }
 
-public fun add_property_to_membership<T: key, PropertyType: drop, Config: store + copy + drop>(
-    membership: &mut Membership<T>,
-    policy: &MembershipPolicy<T>,
-    _: PropertyType,
-    value: u64,
+public fun attatch_property_to_item<LayerType: drop, PropertyType: drop, Config: store + copy + drop>(
+    item: &mut Item<LayerType>,
+    property: Property<PropertyType, Config>,
 ) {
-    assert!(has_property<T, PropertyType>(policy), ENotHasLayer);
-
-    let cfg = dynamic_field::borrow<PropertyTypeKey<PropertyType>, PropertyConfig<PropertyType, Config>>( &policy.id, PropertyTypeKey<PropertyType> {});
-    assert!(cfg.min <= value && value <= cfg.max, EIncorrectProeprtyValue);
-
-    if(dynamic_field::exists_<PropertyTypeKey<PropertyType>>(&membership.id, PropertyTypeKey<PropertyType>{})){
-      let old_property = dynamic_field::remove<PropertyTypeKey<PropertyType>, Property<T, PropertyType, Config>>(&mut membership.id, PropertyTypeKey<PropertyType>{});
-      let Property {value:_, cfg: _} = old_property;
-    };
-
-    let property = Property<T, PropertyType, Config>{value, cfg: *cfg};
-    dynamic_field::add<PropertyTypeKey<PropertyType>, Property<T, PropertyType, Config>>(&mut membership.id, PropertyTypeKey<PropertyType>{}, property);
+    dynamic_field::add(&mut item.id, PropertyKey<PropertyType>{}, property);
 }
 
-// ===================================== Admin Functions
+// ===================================== Membership Policy Admin Functions
 public fun add_layer_type<T: key, LayerType: drop, Config: store + copy + drop>(
     _: LayerType,
     policy: &mut MembershipPolicy<T>,
     cap: &MembershipPolicyCap<T>,
-    order: u64,
     cfg: Config,
 ) {
     assert!(object::id(policy) == cap.policy_id, ENotOwner);
     assert!(!has_layer<T, LayerType>(policy), ERuleAlreadySet);
 
-    add_layer_type_internal(&mut policy.id, _, order, cfg);
-    policy.update_version_policy();
-}
-
-public fun add_item_type<T: key, LayerType: drop, Config: store + copy + drop>(
-    _: LayerType,
-    policy: &mut MembershipPolicy<T>,
-    cap: &MembershipPolicyCap<T>,
-    item_type: String,
-    img_url: String,
-    cfg: Config,
-) {
-    assert!(object::id(policy) == cap.policy_id, ENotOwner);
-    assert!(!has_item<T, LayerType>(policy, item_type), ERuleAlreadySet);
-
-    add_item_type_internal(&mut policy.id, _, item_type, img_url, cfg);
+    let layer_type_key = type_name::get<LayerKey<LayerType>>();
+    policy.layer_types.insert(layer_type_key);
+    dynamic_field::add(&mut policy.id, LayerKey<LayerType> {}, Layer<LayerType, Config>{cfg});
     policy.update_version_policy();
 }
 
@@ -219,61 +196,64 @@ public fun add_property_type<T: key, PropertyType: drop, Config: store + copy + 
     _: PropertyType,
     policy: &mut MembershipPolicy<T>,
     cap: &MembershipPolicyCap<T>,
-    min: u64,
-    max: u64,
     cfg: Config,
 ) {
     assert!(object::id(policy) == cap.policy_id, ENotOwner);
     assert!(!has_property<T, PropertyType>(policy), ERuleAlreadySet);
 
-    add_property_type_internal(&mut policy.id, _, min, max, cfg);
+    dynamic_field::add(&mut policy.id, LayerKey<PropertyType> {}, Property<PropertyType, Config>{cfg});
     policy.update_version_policy();
 }
 
-
 // ===================================== Public Functions
 public fun has_layer<T: key, LayerType: drop>(policy: &MembershipPolicy<T>): bool {
-  dynamic_field::exists_(&policy.id, LayerTypeKey<LayerType> {})
-}
-public fun has_item<T: key, LayerType: drop>(policy: &MembershipPolicy<T>, item_type: String): bool {
-  dynamic_object_field::exists_(&policy.id, ItemTypeKey<LayerType> {item_type})
+  dynamic_field::exists_(&policy.id, LayerKey<LayerType> {})
 }
 public fun has_property<T: key, PropertyType: drop>(policy: &MembershipPolicy<T>): bool {
-  dynamic_field::exists_(&policy.id, PropertyTypeKey<PropertyType> {})
+  dynamic_field::exists_(&policy.id, PropertyKey<PropertyType> {})
 }
 
 // ============================= Public Package Functions
-public (package) fun add_layer_type_internal<LayerType: drop, Config: store + copy + drop>(
-    self: &mut UID,
-    _: LayerType,
-    order: u64,
-    cfg: Config,
-) {
-    dynamic_field::add<LayerTypeKey<LayerType>, LayerConfig<LayerType,Config>>( self, LayerTypeKey<LayerType> {}, LayerConfig{order, cfg});
+public (package) fun new_item_socket<T: key, LayerType: drop, Config: store + copy + drop>(
+    policy: &MembershipPolicy<T>
+): ItemSocket<LayerType, Config> {
+  let layer = dynamic_field::borrow<LayerKey<LayerType>, Layer<LayerType, Config>>(&policy.id, LayerKey<LayerType>{});
+  ItemSocket<LayerType, Config> {
+    socket: option::none(),
+    layer: Layer{cfg: layer.cfg}
+  }
 }
 
-public (package) fun add_item_type_internal<LayerType: drop, Config: store + copy + drop>(
-    self: &mut UID,
-    _: LayerType,
+public (package) fun new_item<LayerType: drop, Config: store + copy + drop>(
     item_type: String,
     img_url: String,
     cfg: Config,
-) {
-    let item_config = ItemConfig<LayerType, Config>{ item_type, img_url, cfg};
-    dynamic_field::add(self, ItemTypeKey<LayerType> {item_type}, item_config);
+    ctx: &mut TxContext,
+): Item<LayerType> {
+    let mut item = Item<LayerType> {
+      id: object::new(ctx),
+      item_type,
+      img_url,
+    };
+
+    dynamic_field::add(&mut item.id, ConfigKey{}, cfg);
+    item
 }
 
-public (package) fun add_property_type_internal<PropertyType: drop, Config: store + copy + drop>(
-    self: &mut UID,
-    _: PropertyType,
-    min: u64,
-    max: u64,
+public (package) fun new_property_value<PropertyType: drop, Config: store + copy + drop>(
+    value: u64,
     cfg: Config,
-) {
-
-    let property_config = PropertyConfig<PropertyType, Config>{ cfg, min, max};
-    dynamic_field::add(self, PropertyTypeKey<PropertyType> {}, property_config);
+): PropertyValue<PropertyType, Config> {
+  PropertyValue{ value, cfg }
 }
+
+public (package) fun new_ticket<TicketType: drop>(
+    ctx: &mut TxContext,
+): Ticket<TicketType> {
+  Ticket<TicketType> {id: object::new(ctx)}
+}
+
+// public fun get_item_from_vendinmachine(){}
 
 public (package) fun update_version_policy<T: key>(policy: &mut MembershipPolicy<T>) {
   policy.version = policy.version + 1;
