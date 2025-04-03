@@ -2,30 +2,29 @@ module exclusuive::collection;
 
 use std::string::{String};
 
-use sui::vec_map::{Self, VecMap};
-use sui::balance::{Self, Balance};
 use sui::sui::{SUI};
+use sui::balance::{Self, Balance};
 use sui::dynamic_field;
+use sui::vec_set::{Self, VecSet};
 use sui::display::{Self};
 use sui::package;
 
 const ENotOwner: u64 = 1;
 const EInvalidCollection: u64 = 2;
-const ENotItemExist: u64 = 3;
-const ENotPropertyExist: u64 = 4;
-const EInvalidPropertyValue: u64 = 5;
+const ENotExistType: u64 = 3;
 
 public struct COLLECTION has drop {}
 
-public struct Collection has key {
+public struct Collection has key, store {
   id: UID,
   base_type: BaseType,
-  layer_types: VecMap<AddTypeKey<LayerType>, LayerType>,
-  item_types: VecMap<AddTypeKey<ItemType>, ItemType>,
-  property_types: VecMap<AddTypeKey<PropertyType>, PropertyType>,
-  // rules: VecSet<Rule>,
+  layer_types: VecSet<LayerType>,
+  property_types: VecSet<PropertyType>,
+  ticket_types: VecSet<TicketType>,
   balance: Balance<SUI>,
+  version: u64,
 }
+
 
 // Owned
 public struct CollectionCap has key, store {
@@ -37,27 +36,22 @@ public struct CollectionCap has key, store {
 // -----------------------------------------------
 public struct BaseType has store, copy, drop {
   collection_id: ID,
-  name: String, 
+  `type`: String, 
 }
 
 public struct LayerType has store, copy, drop {
   collection_id: ID,
   `type`: String, 
-  order: u64
-}
-
-public struct ItemType has store, copy, drop {
-  collection_id: ID,
-  layer_type: LayerType,
-  `type`: String, 
-  img_url: String
 }
 
 public struct PropertyType has store, copy, drop {
   collection_id: ID,
   `type`: String,
-  min: u64,
-  max: u64,
+}
+
+public struct TicketType has store, copy, drop {
+  collection_id: ID,
+  `type`: String,
 }
 
 public struct Config has store, copy, drop {
@@ -70,19 +64,19 @@ public struct Config has store, copy, drop {
 public struct Base has key, store {
   id: UID,
   `type`: BaseType,
-  name: String,
-  img_url: String
+  img_url: String,
 }
 
-public struct Layer has store {
+public struct ItemSocket has store {
   `type`: LayerType, 
   socket: Option<Item>
 }
 
 public struct Item has key, store{
   id: UID,
-  `type`: ItemType, 
-  properties: VecMap<AddTypeKey<PropertyType>, Property>,
+  `type`: LayerType, 
+  item_type: String,
+  img_url: String
 }
 
 public struct Property has store {
@@ -90,31 +84,22 @@ public struct Property has store {
   value: u64
 }
 
-// public struct Rule has store, copy, drop {
-//   name: String,
-//   description: String,
-//   config: RuleConfig
-// }
-
-// public struct RuleConfig has store, copy, drop {
-//   config: u64,
-// }
+public struct Ticket has store {
+  `type`: TicketType, 
+  value: u64
+}
 
 // ==================================================
-public struct AddTypeKey<phantom Type: store + copy + drop> has store, copy, drop {
+public struct TypeKey<phantom Type: store + copy + drop> has store, copy, drop {
   `type`: String
 }
 
-public struct StoreKey<Type: store + copy + drop> has store, copy, drop {
-  `type`: Type
-}
-
 public struct ItemBagKey has store, copy, drop {
-  item_id: ID
+  `type`: String
 }
 
 public struct ConfigKey<phantom Type: store + copy + drop> has store, copy, drop {
-  name: String
+  `type`: String
 }
 
 // ==================================================
@@ -149,19 +134,15 @@ entry fun mint_and_tranfer_base(collection: &Collection, cap: &CollectionCap, im
 }
 
 // ======================== User Public Functions
-public fun update_layer_type_to_base(collection: &Collection, base: &mut Base) {
-  collection.layer_types.keys().do_ref!(|key| {
-    let layer_type = collection.layer_types.get(key);
-    if (!dynamic_field::exists_(&base.id, StoreKey<LayerType>{`type`: *layer_type})){
-      base.add_layer_to_base(*layer_type);
-    };
-  });
-}
-
 public fun equip_item_to_base(collection: &Collection, base: &mut Base, item: Item){
   assert!(object::id(collection) == base.`type`.collection_id, EInvalidCollection);
-  let layer_type = item.`type`.layer_type;
-  let layer = dynamic_field::borrow_mut<StoreKey<LayerType>, Layer>(&mut base.id, StoreKey<LayerType>{`type`: layer_type});
+
+  let layer_type = item.`type`;
+  if (!dynamic_field::exists_<TypeKey<LayerType>>(&base.id, TypeKey<LayerType>{`type`: layer_type.`type`})){
+    dynamic_field::add(&mut base.id, TypeKey<LayerType>{`type`: layer_type.`type`}, ItemSocket{`type`: layer_type, socket: option::none<Item>()});
+  };
+
+  let layer = dynamic_field::borrow_mut<TypeKey<LayerType>, ItemSocket>(&mut base.id, TypeKey<LayerType>{`type`: layer_type.`type`});
 
   if (layer.socket.is_none()) {
     layer.socket.fill(item);
@@ -169,116 +150,92 @@ public fun equip_item_to_base(collection: &Collection, base: &mut Base, item: It
   }; 
   
   let old_item = layer.socket.swap(item);
-  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut base.id, ItemBagKey{item_id: object::id(&old_item)}).push_back(old_item);
+  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut base.id, ItemBagKey{`type`: layer_type.`type`})
+  .push_back(old_item);
 }
 
-public fun remove_item_from_bag(base: &mut Base, item_id: ID): Item{
-  dynamic_field::remove(&mut base.id, ItemBagKey{item_id})
+public fun pop_item_from_bag(base: &mut Base, `type`: String): Item{
+  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut base.id, ItemBagKey{`type`})
+  .pop_back()
 }
 
-public fun add_property_to_item(collection: &Collection, item: &mut Item, property: Property) {
-  assert!(collection.item_types.contains(&AddTypeKey{`type`: item.`type`.`type` }), ENotItemExist);
-  assert!(collection.property_types.contains(&AddTypeKey{`type`: property.`type`.`type` }), ENotPropertyExist);
+public fun attach_property_to_item(collection: &Collection, item: &mut Item, property: Property) {
+  assert!(object::id(collection) == item.`type`.collection_id, EInvalidCollection);
 
-  item.properties.insert(
-    AddTypeKey{`type`: property.`type`.`type`},
-    property
-  );
+  dynamic_field::add(&mut item.id, TypeKey<PropertyType>{`type`: property.`type`.`type`}, property)
 }
-
-// 조건에 맞게 달성하면 item 또는 property를 얻을 수 있음
-// public fun request_property(collection: &Collection, base: &Base): Property { }
-
-// public fun request_item(collection: &Collection, base: &Base): Item { }
 
 // ======================== Admin Public Functions 
-
 public fun new_base(collection: &Collection, cap: &CollectionCap, img_url: String, ctx: &mut TxContext): Base { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
-  let mut base = Base {
+  let base = Base {
     id: object::new(ctx),
     `type`: collection.base_type,
-    name: collection.base_type.name,
     img_url
   };
-
-  collection.layer_types.keys().do_ref!(|key| {
-    let layer_type = collection.layer_types.get(key);
-    base.add_layer_to_base(*layer_type);
-  } );
 
   base
 }
 
-public fun new_item(collection: &Collection, cap: &CollectionCap, `type`: String, ctx: &mut TxContext): Item { 
+public fun new_item(collection: &Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, ctx: &mut TxContext): Item { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
-  let item_type = collection.item_types.get<AddTypeKey<ItemType>, ItemType>(&AddTypeKey<ItemType>{`type`});
+  let layer_type = dynamic_field::borrow<TypeKey<LayerType>, LayerType>(&collection.id, TypeKey<LayerType>{`type`: layer_type});
   Item {
     id: object::new(ctx),
-    `type`: *item_type,      
-    properties: vec_map::empty<AddTypeKey<PropertyType>, Property>()
+    `type`: *layer_type,      
+    item_type,
+    img_url
   }
 }
 
 public fun new_property(collection: &Collection, cap: &CollectionCap, `type`: String, value: u64): Property { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
-  let property_type = collection.property_types.get(&AddTypeKey<PropertyType>{`type`});
-  assert!(property_type.min <= value && value <= property_type.max, EInvalidPropertyValue);
-
+  let property_type = dynamic_field::borrow<TypeKey<PropertyType>, PropertyType>(&collection.id, TypeKey<PropertyType>{`type`});
   Property {`type`: *property_type, value}
 }
 
-public fun store_property(collection: &mut Collection, cap: &CollectionCap, property: Property) {
+public fun new_ticket(collection: &Collection, cap: &CollectionCap, `type`: String, value: u64): Ticket { 
+  assert!(object::id(collection) == cap.collection_id, ENotOwner);
+
+  let ticket_type = dynamic_field::borrow<TypeKey<TicketType>, TicketType>(&collection.id, TypeKey<TicketType>{`type`});
+  Ticket {`type`: *ticket_type, value}
+}
+
+
+public fun add_layer_type(collection: &mut Collection, cap: &CollectionCap, `type`: String) {
     let collection_id = object::id(collection);
     assert!(collection_id == cap.collection_id, ENotOwner);
 
-    if (!dynamic_field::exists_(&collection.id, StoreKey<PropertyType>{`type`: property.`type`})) {
-
-    dynamic_field::add<StoreKey<PropertyType>, vector<Property>>(&mut collection.id, StoreKey<PropertyType>{`type`: property.`type`}, vector::empty<Property>());
-    };
-    let property_vec = dynamic_field::borrow_mut<StoreKey<PropertyType>, vector<Property>>(&mut collection.id, StoreKey<PropertyType>{`type`: property.`type`});
-    property_vec.push_back(property);
+    collection.layer_types.insert(LayerType{collection_id, `type`});
+    dynamic_field::add(&mut collection.id, TypeKey<LayerType> {`type`}, LayerType{collection_id, `type`});
+    collection.update_version();
 }
 
-public fun add_layer_type( collection: &mut Collection, cap: &CollectionCap, `type`: String, order: u64) {
+public fun add_property_type(collection: &mut Collection, cap: &CollectionCap, `type`: String) {
     let collection_id = object::id(collection);
     assert!(collection_id == cap.collection_id, ENotOwner);
 
-    collection.layer_types.insert(
-      AddTypeKey{`type`}, 
-      LayerType{collection_id, `type`, order}
-    );
+    collection.property_types.insert(PropertyType{collection_id, `type`});
+    dynamic_field::add(&mut collection.id, TypeKey<PropertyType> {`type`}, PropertyType{collection_id, `type`});
+    collection.update_version();
 }
 
-public fun add_item_type( collection: &mut Collection, cap: &CollectionCap, layer_type: String, `type`: String, img_url: String) {
+public fun add_ticket_type(collection: &mut Collection, cap: &CollectionCap, `type`: String) {
     let collection_id = object::id(collection);
     assert!(collection_id == cap.collection_id, ENotOwner);
 
-    let layer_type = collection.layer_types.get<AddTypeKey<LayerType>, LayerType>(
-      &AddTypeKey{`type`:layer_type});
-
-    collection.item_types.insert(
-      AddTypeKey{`type`}, 
-      ItemType{collection_id, layer_type: *layer_type, `type`, img_url}
-    );
+    collection.ticket_types.insert(TicketType{collection_id, `type`});
+    dynamic_field::add(&mut collection.id, TypeKey<PropertyType> {`type`}, PropertyType{collection_id, `type`});
+    collection.update_version();
 }
 
-public fun add_property_type(collection: &mut Collection, cap: &CollectionCap, `type`: String, min: u64, max: u64) {
-    let collection_id = object::id(collection);
-    assert!(collection_id == cap.collection_id, ENotOwner);
-
-    collection.property_types.insert(
-      AddTypeKey{`type`}, 
-      PropertyType{collection_id, `type`, min, max }
-    );
-}
-
-public fun add_config_to_type<Type: store + copy + drop>(collection: &mut Collection, cap: &CollectionCap, name: String, content: String) {
+public fun add_config_to_type<Type: store + copy + drop>(collection: &mut Collection, cap: &CollectionCap, `type`: String, name: String, content: String) {
   let collection_id = object::id(collection);
   assert!(collection_id == cap.collection_id, ENotOwner);
 
-  dynamic_field::add(&mut collection.id, ConfigKey<Type>{name}, Config{name, content});
+  assert!(dynamic_field::exists_(&collection.id, TypeKey<Type>{`type`}), ENotExistType);
+  dynamic_field::add(&mut collection.id, ConfigKey<Type>{`type`}, Config{name, content});
 }
 
 // ======================== Private Functions 
@@ -290,21 +247,17 @@ fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   (
       Collection { 
         id, 
-        base_type: BaseType{ collection_id, name },
-        layer_types: vec_map::empty<AddTypeKey<LayerType>, LayerType>(),
-        item_types: vec_map::empty<AddTypeKey<ItemType>, ItemType>(),
-        property_types: vec_map::empty<AddTypeKey<PropertyType>, PropertyType>(),
-        // rules: vec_set::empty<Rule>(), 
-        balance: balance::zero() 
+        base_type: BaseType{collection_id, `type`: name},
+        layer_types: vec_set::empty<LayerType>(),
+        property_types: vec_set::empty<PropertyType>(),
+        ticket_types: vec_set::empty<TicketType>(),
+        balance: balance::zero(),
+        version: 0
       },
       CollectionCap { id: object::new(ctx), collection_id },
   )
 }
 
-fun add_layer_to_base(base: &mut Base, layer_type: LayerType){
-  let layer = Layer {
-    `type`: layer_type,
-    socket: option::none<Item>()
-  };
-  dynamic_field::add<StoreKey<LayerType>, Layer>(&mut base.id, StoreKey<LayerType>{`type`: layer_type}, layer);
+public (package) fun update_version(collection: &mut Collection) {
+  collection.version = collection.version + 1;
 }
