@@ -50,6 +50,7 @@ public struct VendingMachineCap<phantom T: key> has key, store {
 
 // 이게 Inputs, 즉 Rules, 즉, Condition
 public struct Selection has store {
+  number: u64,
   conditions: vector<Condition>,
   price: u64,
   product: TypeName
@@ -93,18 +94,9 @@ public struct Membership<phantom T: key> has key, store {
   policy_id: ID
 }
 
-// Layer만 policy에 추가 되는 타입 데이터
-public struct Layer<phantom LayerType: drop, Config: store + copy + drop> has store {
-  cfg: Config,
-}
-
-public struct Property<phantom PropertyType: drop, Config: store + copy + drop> has store {
-  cfg: Config
-}
-
 public struct ItemSocket<phantom LayerType: drop, Config: store + copy + drop> has store {
   socket: Option<Item<LayerType>>,
-  layer: Layer<LayerType, Config>
+  cfg: Config
 }
 
 // 생산 품
@@ -115,7 +107,7 @@ public struct Item<phantom LayerType: drop> has key, store {
 }
 
 // 생산 품 // 요건 Item이랑 Membership에 장착하는 건데, 하나만 장착할 수 있고, 한 번만 장착 할 수 있어
-public struct PropertyValue<phantom PropertyType: drop> has store {
+public struct Property<phantom PropertyType: drop> has store {
   value: u64,
 }
 
@@ -206,10 +198,10 @@ public fun add_item_to_membership<T: key, LayerType: drop, Config: store + copy 
     };
 
     if (!dynamic_field::exists_(&membership.id, LayerKey<LayerType>{})){
-      let layer = dynamic_field::borrow<LayerKey<LayerType>, Layer<LayerType, Config>>(&policy.id, LayerKey<LayerType>{});
-      let item_socket = ItemSocket{
+      let cfg = dynamic_field::borrow<LayerKey<LayerType>, Config>(&policy.id, LayerKey<LayerType>{});
+      let item_socket = ItemSocket<LayerType, Config>{
         socket: option::none(), 
-        layer: Layer<LayerType, Config>{cfg: layer.cfg}
+        cfg: *cfg
       };
       dynamic_field::add(&mut membership.id, LayerKey<LayerType>{}, item_socket);
     };
@@ -248,39 +240,11 @@ public fun pop_ticket_from_membership<T: key, TicketType: drop>(
 
 public fun attatch_property_to_item<LayerType: drop, PropertyType: drop, Config: store + copy + drop>(
     item: &mut Item<LayerType>,
-    property: Property<PropertyType, Config>,
+    property: Property<PropertyType>
 ) {
     dynamic_field::add(&mut item.id, PropertyKey<PropertyType>{}, property);
 }
 
-// ===================================== Membership Policy Functions for Admin Package
-public fun add_layer_type<T: key, LayerType: drop, Config: store + copy + drop>(
-    _: LayerType,
-    policy: &mut MembershipPolicy<T>,
-    cap: &MembershipPolicyCap<T>,
-    cfg: Config,
-) {
-    assert!(object::id(policy) == cap.policy_id, ENotOwner);
-    assert!(!has_layer<T, LayerType>(policy), ERuleAlreadySet);
-
-    let layer_type_key = type_name::get<LayerKey<LayerType>>();
-    policy.layer_types.insert(layer_type_key);
-    dynamic_field::add(&mut policy.id, LayerKey<LayerType> {}, Layer<LayerType, Config>{cfg});
-    policy.update_version_policy();
-}
-
-public fun add_property_type<T: key, PropertyType: drop, Config: store + copy + drop>(
-    _: PropertyType,
-    policy: &mut MembershipPolicy<T>,
-    cap: &MembershipPolicyCap<T>,
-    cfg: Config,
-) {
-    assert!(object::id(policy) == cap.policy_id, ENotOwner);
-    assert!(!has_property<T, PropertyType>(policy), ERuleAlreadySet);
-
-    dynamic_field::add(&mut policy.id, LayerKey<PropertyType> {}, Property<PropertyType, Config>{cfg});
-    policy.update_version_policy();
-}
 // ===================================== Create Functions for Admin Package
 
 public fun new_item<LayerType: drop, Config: store + copy + drop>(
@@ -303,8 +267,8 @@ public fun new_item<LayerType: drop, Config: store + copy + drop>(
 public fun new_property_value<PropertyType: drop>(
     _: PropertyType,
     value: u64,
-): PropertyValue<PropertyType> {
-  PropertyValue{value}
+): Property<PropertyType> {
+  Property{value}
 }
 
 public fun new_ticket<TicketType: drop>(
@@ -314,16 +278,63 @@ public fun new_ticket<TicketType: drop>(
   Ticket<TicketType> {id: object::new(ctx)}
 }
 
-public fun add_selection_to_machine<T: key, Product>(machine: &mut VendingMachine<T>, cap: &VendingMachineCap<T>, price: u64) {
+// ===================================== Membership Policy Functions for Admin Package
+public fun add_layer_type<T: key, LayerType: drop, Config: store + copy + drop>(
+    _: LayerType,
+    policy: &mut MembershipPolicy<T>,
+    cap: &MembershipPolicyCap<T>,
+    cfg: Config,
+) {
+    assert!(object::id(policy) == cap.policy_id, ENotOwner);
+    assert!(!has_layer<T, LayerType>(policy), ERuleAlreadySet);
+
+    let layer_type = type_name::get<LayerType>();
+    policy.layer_types.insert(layer_type);
+    dynamic_field::add(&mut policy.id, LayerKey<LayerType> {}, cfg);
+    policy.update_version_policy();
+}
+
+public fun add_property_type<T: key, PropertyType: drop, Config: store + copy + drop>(
+    _: PropertyType,
+    policy: &mut MembershipPolicy<T>,
+    cap: &MembershipPolicyCap<T>,
+    cfg: Config,
+) {
+    assert!(object::id(policy) == cap.policy_id, ENotOwner);
+    assert!(!has_property<T, PropertyType>(policy), ERuleAlreadySet);
+
+    dynamic_field::add(&mut policy.id, LayerKey<PropertyType> {}, cfg);
+    policy.update_version_policy();
+}
+
+// ===================================== Vending Machine Functions for Admin Package
+public fun add_selection_to_machine<T: key, Product: store>(machine: &mut VendingMachine<T>, cap: &VendingMachineCap<T>, price: u64) {
   assert!(object::id(machine) == cap.machine_id, ENotOwner);
   let selection = Selection{
+    number: machine.selections.length(),
     conditions: vector<Condition>[],
     price,
     product: type_name::get<Product>()
   };
 
+  dynamic_field::add(&mut machine.id, ProductKey{selection_number: machine.selections.length()}, vector<Product>[]);
+
   machine.selections.push_back(selection);
   machine.size = machine.selections.length();
+}
+
+public fun add_product_to_machine<T: key, Product: store>(machine: &mut VendingMachine<T>, cap: &VendingMachineCap<T>, selection_number: u64, product: Product) {
+  assert!(object::id(machine) == cap.machine_id, ENotOwner);
+  machine.selections.borrow(selection_number);
+
+  dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut machine.id, ProductKey{selection_number})
+  .push_back(product);
+}
+
+public fun add_balance_to_machine<T: key>(machine: &mut VendingMachine<T>, request: &mut SelectRequest<T>, coin: Coin<SUI> ) {
+  assert!(object::id(machine) == request.machine_id, ENotCorrectVendingMachine);
+  request.paid = request.paid + coin.value();
+  machine.balance.join(coin.into_balance());
 }
 
 public fun borrow_selection<T: key>(machine: &mut VendingMachine<T>, cap: &VendingMachineCap<T>, index: u64): &Selection {
@@ -345,25 +356,6 @@ public fun add_condition_to_selection<TicketType: drop>(selection: &mut Selectio
   })
 } 
 
-public fun add_product_to_machine<T: key, Product: store>(machine: &mut VendingMachine<T>, cap: &VendingMachineCap<T>, selection_number: u64, product: Product) {
-  assert!(object::id(machine) == cap.machine_id, ENotOwner);
-  machine.selections.borrow(selection_number);
-
-  if (!dynamic_field::exists_(&machine.id, ProductKey{selection_number})) {
-    dynamic_field::add(&mut machine.id, ProductKey{selection_number}, vector<Product>[]);
-  };
-
-  dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut machine.id, ProductKey{selection_number})
-  .push_back(product);
-}
-
-// ===================================== Public Functions
-public fun has_layer<T: key, LayerType: drop>(policy: &MembershipPolicy<T>): bool {
-  dynamic_field::exists_(&policy.id, LayerKey<LayerType> {})
-}
-public fun has_property<T: key, PropertyType: drop>(policy: &MembershipPolicy<T>): bool {
-  dynamic_field::exists_(&policy.id, PropertyKey<PropertyType> {})
-}
 
 // ============================= Public Package Functions
 public fun new_request<T: key>(machine: &VendingMachine<T>, selection_number: u64): SelectRequest<T> {
@@ -373,12 +365,6 @@ public fun new_request<T: key>(machine: &VendingMachine<T>, selection_number: u6
     paid: 0,
     receipts: vec_map::empty<TypeName, u64>()
   }
-}
-
-public fun add_balance_to_machine<T: key>(machine: &mut VendingMachine<T>, request: &mut SelectRequest<T>, coin: Coin<SUI> ) {
-  assert!(object::id(machine) == request.machine_id, ENotCorrectVendingMachine);
-  request.paid = request.paid + coin.value();
-  machine.balance.join(coin.into_balance());
 }
 
 public fun burn_ticket<T: key, TicketType: drop>(
@@ -422,6 +408,15 @@ public fun confirm_request<T: key, Product: store>(
 
     (machine_id, paid, product)
 }
+
+// ===================================== Public Functions
+public fun has_layer<T: key, LayerType: drop>(policy: &MembershipPolicy<T>): bool {
+  dynamic_field::exists_(&policy.id, LayerKey<LayerType> {})
+}
+public fun has_property<T: key, PropertyType: drop>(policy: &MembershipPolicy<T>): bool {
+  dynamic_field::exists_(&policy.id, PropertyKey<PropertyType> {})
+}
+
 
 // public fun get_item_from_vendinmachine(){}
 
