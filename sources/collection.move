@@ -21,6 +21,7 @@ public struct Collection has key, store {
   layer_types: VecSet<LayerType>,
   property_types: VecSet<PropertyType>,
   ticket_types: VecSet<TicketType>,
+  item_types: VecSet<String>,
   balance: Balance<SUI>,
   version: u64,
 }
@@ -121,7 +122,8 @@ public struct ItemBagKey has store, copy, drop {
 }
 
 public struct ConfigKey<phantom Type: store + copy + drop> has store, copy, drop {
-  `type`: String
+  `type`: String,
+  name: String,
 }
 
 // ==================================================
@@ -153,6 +155,17 @@ entry fun mint_and_tranfer_base(collection: &Collection, cap: &CollectionCap, im
 
   let base = new_base(collection, cap, img_url, ctx);
   transfer::transfer(base, recipient);
+}
+
+entry fun mint_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, recipient: address, ctx: &mut TxContext) { 
+  assert!(object::id(collection) == cap.collection_id, ENotOwner);
+
+  if(!collection.item_types.contains(&item_type)) {
+    collection.item_types.insert(item_type)
+  };
+
+  let item = new_item(collection, cap, layer_type, item_type, img_url, ctx);
+  transfer::transfer(item, recipient)
 }
 
 // ======================== User Public Functions
@@ -257,7 +270,7 @@ public fun add_config_to_type<Type: store + copy + drop>(collection: &mut Collec
   assert!(collection_id == cap.collection_id, ENotOwner);
 
   assert!(dynamic_field::exists_(&collection.id, TypeKey<Type>{`type`}), ENotExistType);
-  dynamic_field::add(&mut collection.id, ConfigKey<Type>{`type`}, Config{name, content});
+  dynamic_field::add(&mut collection.id, ConfigKey<Type>{`type`, name}, Config{name, content});
 }
 
 // ======================== Private Functions 
@@ -266,17 +279,23 @@ fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   let id = object::new(ctx);
   let collection_id = id.to_inner();
   // event::emit(CollectionPolicyCreated<T> { id: policy_id });
+  let mut collection = 
+    Collection { 
+      id, 
+      base_type: BaseType{collection_id, `type`: name},
+      layer_types: vec_set::empty<LayerType>(),
+      property_types: vec_set::empty<PropertyType>(),
+      ticket_types: vec_set::empty<TicketType>(),
+      item_types: vec_set::empty<String>(),
+      balance: balance::zero(),
+      version: 0
+    };
+
+  dynamic_field::add(&mut collection.id, TypeKey<BaseType> {`type`: name}, BaseType{collection_id, `type`: name});
+
   (
-      Collection { 
-        id, 
-        base_type: BaseType{collection_id, `type`: name},
-        layer_types: vec_set::empty<LayerType>(),
-        property_types: vec_set::empty<PropertyType>(),
-        ticket_types: vec_set::empty<TicketType>(),
-        balance: balance::zero(),
-        version: 0
-      },
-      CollectionCap { id: object::new(ctx), collection_id },
+    collection,
+    CollectionCap { id: object::new(ctx), collection_id },
   )
 }
 
