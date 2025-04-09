@@ -8,11 +8,8 @@ use sui::balance::{Self, Balance};
 use sui::coin::{Coin};
 use sui::sui::{SUI};
 use sui::dynamic_field;
-// use sui::dynamic_object_field;
 use sui::vec_map::{Self, VecMap};
 use sui::vec_set::{Self, VecSet};
-// use sui::bag::{Self, Bag};
-// use sui::transfer_policy::{Self, RuleKey};
 
 const ENotOwner: u64 = 100;
 const ERuleAlreadySet: u64 = 101;
@@ -149,7 +146,6 @@ public fun new_vending_machine<T: key>(
         id,
         policy_id: object::id(policy),
         selections: vector<Selection>[],
-        // selections: vec_map::empty<u64, Selection>(),
         size: 0,
         balance: balance::zero()
       },
@@ -238,7 +234,7 @@ public fun pop_ticket_from_membership<T: key, TicketType: drop>(
 }
 
 
-public fun attatch_property_to_item<LayerType: drop, PropertyType: drop, Config: store + copy + drop>(
+public fun attatch_property_to_item<LayerType: drop, PropertyType: drop>(
     item: &mut Item<LayerType>,
     property: Property<PropertyType>
 ) {
@@ -369,7 +365,7 @@ public fun new_request<T: key>(machine: &VendingMachine<T>, selection_number: u6
 
 public fun burn_ticket<T: key, TicketType: drop>(
     _: TicketType,
-    machine: &mut VendingMachine<T>, 
+    machine: &VendingMachine<T>, 
     request: &mut SelectRequest<T>, 
     ticket: Ticket<TicketType> 
   ) {
@@ -417,10 +413,7 @@ public fun has_property<T: key, PropertyType: drop>(policy: &MembershipPolicy<T>
   dynamic_field::exists_(&policy.id, PropertyKey<PropertyType> {})
 }
 
-
-// public fun get_item_from_vendinmachine(){}
-
-public (package) fun update_version_policy<T: key>(policy: &mut MembershipPolicy<T>) {
+public fun update_version_policy<T: key>(policy: &mut MembershipPolicy<T>) {
   policy.version = policy.version + 1;
 }
 public (package) fun get_struct_name(self: TypeName): String {
