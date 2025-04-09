@@ -1,17 +1,23 @@
 module exclusuive::collection;
 
 use std::string::{String};
+use std::type_name::{Self, TypeName};
 
+use sui::coin::{Coin};
 use sui::sui::{SUI};
 use sui::balance::{Self, Balance};
 use sui::dynamic_field;
 use sui::vec_set::{Self, VecSet};
+use sui::vec_map::{Self, VecMap};
 use sui::display::{Self};
 use sui::package;
 
 const ENotOwner: u64 = 1;
 const EInvalidCollection: u64 = 2;
-const ENotExistType: u64 = 3;
+const EInvalidSupplyer: u64 = 3;
+const ENotExistType: u64 = 4;
+const ENotEnoughPaid: u64 = 5;
+const EIllegalRule: u64 = 6;
 
 public struct COLLECTION has drop {}
 
@@ -31,19 +37,24 @@ public struct CollectionCap has key, store {
   collection_id: ID
 }
 
-public struct Supplyer<Product: store> has key, store {
+public struct Supplyer has key, store {
   id: UID,
   collection_id: ID,
-  selections: vector<Selection<Product>>,
+  selections: vector<Selection>,
   size: u64,
   balance: Balance<SUI>,
 }
 
-public struct Selection<Product: store> has store {
+public struct SupplyerCap has key, store {
+  id: UID,
+  supplyer_id: ID
+}
+
+public struct Selection has store {
   number: u64,
   conditions: vector<Condition>,
   price: u64,
-  product: Product
+  product: TypeName
 }
 
 public struct Condition has store, copy, drop {
@@ -51,10 +62,13 @@ public struct Condition has store, copy, drop {
   requirement: u64,
 }
 
-public struct SupplyerCap has key, store {
-  id: UID,
-  machine_id: ID
+public struct SelectRequest {
+  supplyer_id: ID,
+  selection_number: u64,
+  paid: u64,
+  receipts: VecMap<TicketType, u64>,
 }
+
 
 // Collection Metadata 
 // -----------------------------------------------
@@ -119,6 +133,14 @@ public struct TypeKey<phantom Type: store + copy + drop> has store, copy, drop {
 
 public struct ItemBagKey has store, copy, drop {
   `type`: String
+}
+
+public struct TicketBagKey has store, copy, drop {
+  `type`: String
+}
+
+public struct ProductKey has store, copy, drop{
+  selection_number: u64
 }
 
 public struct ConfigKey<phantom Type: store + copy + drop> has store, copy, drop {
@@ -200,6 +222,27 @@ public fun attach_property_to_item(collection: &Collection, item: &mut Item, pro
   dynamic_field::add(&mut item.id, TypeKey<PropertyType>{`type`: property.`type`.`type`}, property)
 }
 
+public fun add_ticket_to_base(
+    collection: &Collection,
+    base: &mut Base,
+    ticket: Ticket,
+) {
+    assert!(object::id(collection) == ticket.`type`.collection_id, EInvalidCollection);
+
+    if (!dynamic_field::exists_(&base.id, TicketBagKey{`type`: ticket.`type`.`type`})){
+      dynamic_field::add<TicketBagKey, vector<Ticket>>(&mut base.id, TicketBagKey{`type`: ticket.`type`.`type`}, vector<Ticket>[]);
+    };
+
+    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut base.id, TicketBagKey{`type`: ticket.`type`.`type`});
+    ticket_bag.push_back(ticket);
+}
+
+public fun pop_ticket_from_membership( base: &mut Base, `type`: String): Ticket {
+    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut base.id, TicketBagKey{`type`});
+    ticket_bag.pop_back()
+}
+
+
 // ======================== Admin Public Functions 
 public fun new_base(collection: &Collection, cap: &CollectionCap, img_url: String, ctx: &mut TxContext): Base { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
@@ -271,6 +314,159 @@ public fun add_config_to_type<Type: store + copy + drop>(collection: &mut Collec
 
   assert!(dynamic_field::exists_(&collection.id, TypeKey<Type>{`type`}), ENotExistType);
   dynamic_field::add(&mut collection.id, ConfigKey<Type>{`type`, name}, Config{name, content});
+}
+
+public fun add_selection_to_supplyer<Product: store>(
+  collection: &Collection,
+  supplyer: &mut Supplyer,
+  cap: &SupplyerCap,
+  price: u64
+  ) {
+    let collection_id = object::id(collection);
+    assert!(collection_id == supplyer.collection_id, EInvalidCollection);
+    assert!(collection_id == cap.supplyer_id, ENotOwner);
+
+  let selection = Selection{
+    number: supplyer.selections.length(),
+    conditions: vector<Condition>[],
+    price,
+    product: type_name::get<Product>()
+  };
+
+  dynamic_field::add(&mut supplyer.id, ProductKey{selection_number: supplyer.selections.length()}, vector<Product>[]);
+
+  supplyer.selections.push_back(selection);
+  supplyer.size = supplyer.selections.length();
+}
+
+public fun add_product_to_supplyer<Product: store>(
+  collection: &Collection,
+  supplyer: &mut Supplyer,
+  cap: &SupplyerCap,
+  selection_number: u64, 
+  product: Product
+  ) {
+    let collection_id = object::id(collection);
+    assert!(collection_id == supplyer.collection_id, EInvalidCollection);
+    assert!(collection_id == cap.supplyer_id, ENotOwner);
+
+    supplyer.selections.borrow(selection_number);
+
+    dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut supplyer.id, ProductKey{selection_number})
+    .push_back(product);
+}
+
+public fun add_balance_to_supplyer(
+  collection: &Collection,
+  supplyer: &mut Supplyer,
+  cap: &SupplyerCap,
+  request: &mut SelectRequest, 
+  coin: Coin<SUI> ) {
+    let collection_id = object::id(collection);
+    assert!(collection_id == supplyer.collection_id, EInvalidCollection);
+    assert!(collection_id == cap.supplyer_id, ENotOwner);
+
+    request.paid = request.paid + coin.value();
+    supplyer.balance.join(coin.into_balance());
+}
+
+public fun borrow_selection(
+  collection: &Collection,
+  supplyer: &Supplyer,
+  cap: &SupplyerCap,
+  index: u64
+  ): &Selection {
+    let collection_id = object::id(collection);
+    assert!(collection_id == supplyer.collection_id, EInvalidCollection);
+    assert!(collection_id == cap.supplyer_id, ENotOwner);
+
+    supplyer.selections.borrow(index)
+}
+
+public fun borrow_mut_selection(
+  collection: &Collection,
+  supplyer: &mut Supplyer,
+  cap: &SupplyerCap,
+  index: u64
+  ): &mut Selection {
+    let collection_id = object::id(collection);
+    assert!(collection_id == supplyer.collection_id, EInvalidCollection);
+    assert!(collection_id == cap.supplyer_id, ENotOwner);
+
+    supplyer.selections.borrow_mut(index)
+}
+
+public fun add_condition_to_selection(
+  collection: &Collection,
+  selection: &mut Selection, 
+  ticket_type: String,
+  requirement: u64
+  ) {
+  selection.conditions.push_back(Condition{
+    ticket_type: TicketType{collection_id: object::id(collection), `type`: ticket_type},
+    requirement
+  })
+} 
+
+// ============================= Public Package Functions
+public fun new_request(
+  collection: &Collection,
+  supplyer: &mut Supplyer,
+  selection_number: u64
+  ): SelectRequest {
+    assert!(object::id(collection) == supplyer.collection_id, EInvalidCollection);
+    SelectRequest {
+      supplyer_id: object::id(supplyer),
+      selection_number,
+      paid: 0,
+      receipts: vec_map::empty<TicketType, u64>()
+    }
+}
+
+public fun burn_ticket(
+    collection: &Collection,
+    supplyer: &Supplyer,
+    request: &mut SelectRequest, 
+    ticket: Ticket 
+  ) {
+    assert!(object::id(collection) == supplyer.collection_id, EInvalidCollection);
+    assert!(object::id(supplyer) == request.supplyer_id, EInvalidSupplyer);
+
+    let Ticket {`type`} = ticket;
+    let (key, value) = request.receipts.remove(&`type`);
+    request.receipts.insert(key, value+1);
+}
+
+public fun confirm_request<Product: store>(
+    collection: &Collection,
+    supplyer: &mut Supplyer,
+    request: SelectRequest, 
+): (ID, u64, Product) {
+    assert!(object::id(collection) == supplyer.collection_id, EInvalidCollection);
+    assert!(object::id(supplyer) == request.supplyer_id, EInvalidSupplyer);
+
+    let SelectRequest { supplyer_id, selection_number, paid, receipts } = request;
+    let selection = &supplyer.selections[selection_number];
+
+    assert!(selection.price == paid, ENotEnoughPaid);
+
+    let mut completed = selection.conditions;
+    let mut total = selection.conditions.length();
+
+    while (total > 0) {
+        let condition = completed.pop_back();
+
+        let ticket_type = condition.ticket_type;
+        let burned_tickets = *receipts.get(&ticket_type);
+        assert!(burned_tickets == condition.requirement, EIllegalRule);
+
+        total = total - 1;
+    };
+
+    let product = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut supplyer.id, ProductKey{selection_number})
+    .pop_back();
+
+    (supplyer_id, paid, product)
 }
 
 // ======================== Private Functions 
