@@ -199,6 +199,10 @@ public fun equip_item_to_base(collection: &Collection, base: &mut Base, item: It
     dynamic_field::add(&mut base.id, TypeKey<LayerType>{`type`: layer_type.`type`}, ItemSocket{`type`: layer_type, socket: option::none<Item>()});
   };
 
+  if (!dynamic_field::exists_<ItemBagKey>(&base.id, ItemBagKey{`type`: layer_type.`type`})){
+    dynamic_field::add(&mut base.id, ItemBagKey{`type`: layer_type.`type`}, vector<Item>[]);
+  };
+
   let layer = dynamic_field::borrow_mut<TypeKey<LayerType>, ItemSocket>(&mut base.id, TypeKey<LayerType>{`type`: layer_type.`type`});
 
   if (layer.socket.is_none()) {
