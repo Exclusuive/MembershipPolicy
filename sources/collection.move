@@ -27,7 +27,7 @@ public struct Collection has key, store {
   layer_types: VecSet<LayerType>,
   property_types: VecSet<PropertyType>,
   ticket_types: VecSet<TicketType>,
-  item_types: VecSet<String>,
+  item_types: VecSet<ItemType>,
   balance: Balance<SUI>,
   version: u64,
 }
@@ -80,6 +80,13 @@ public struct BaseType has store, copy, drop {
 public struct LayerType has store, copy, drop {
   collection_id: ID,
   `type`: String, 
+}
+
+public struct ItemType has store, copy, drop {
+  collection_id: ID,
+  `type`: LayerType, 
+  item_type: String,
+  img_url: String
 }
 
 public struct PropertyType has store, copy, drop {
@@ -189,10 +196,13 @@ entry fun mint_and_tranfer_base(collection: &Collection, cap: &CollectionCap, im
 }
 
 entry fun mint_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, recipient: address, ctx: &mut TxContext) { 
+  let collection_id = object::id(collection);
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
+  assert!(collection.layer_types.contains(&LayerType{collection_id, `type`: layer_type}), ENotExistType);
 
-  if(!collection.item_types.contains(&item_type)) {
-    collection.item_types.insert(item_type)
+  if(!collection.item_types.contains(&ItemType{collection_id, `type`: LayerType{collection_id, `type`: layer_type}, item_type, img_url})) {
+    collection.item_types.insert(ItemType{collection_id, `type`: LayerType{collection_id, `type`: layer_type}, item_type, img_url});
+    collection.update_version();
   };
 
   let item = new_item(collection, cap, layer_type, item_type, img_url, ctx);
@@ -504,7 +514,7 @@ fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
       layer_types: vec_set::empty<LayerType>(),
       property_types: vec_set::empty<PropertyType>(),
       ticket_types: vec_set::empty<TicketType>(),
-      item_types: vec_set::empty<String>(),
+      item_types: vec_set::empty<ItemType>(),
       balance: balance::zero(),
       version: 0
     };
