@@ -197,13 +197,8 @@ entry fun mint_and_tranfer_base(collection: &Collection, cap: &CollectionCap, im
 
 entry fun mint_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, recipient: address, ctx: &mut TxContext) { 
   let collection_id = object::id(collection);
-  assert!(object::id(collection) == cap.collection_id, ENotOwner);
+  assert!(collection_id == cap.collection_id, ENotOwner);
   assert!(collection.layer_types.contains(&LayerType{collection_id, `type`: layer_type}), ENotExistType);
-
-  if(!collection.item_types.contains(&ItemType{collection_id, `type`: LayerType{collection_id, `type`: layer_type}, item_type, img_url})) {
-    collection.item_types.insert(ItemType{collection_id, `type`: LayerType{collection_id, `type`: layer_type}, item_type, img_url});
-    collection.update_version();
-  };
 
   let item = new_item(collection, cap, layer_type, item_type, img_url, ctx);
   transfer::transfer(item, recipient)
@@ -278,9 +273,15 @@ public fun new_base(collection: &Collection, cap: &CollectionCap, img_url: Strin
   base
 }
 
-public fun new_item(collection: &Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, ctx: &mut TxContext): Item { 
-  assert!(object::id(collection) == cap.collection_id, ENotOwner);
+public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, ctx: &mut TxContext): Item { 
+  let collection_id = object::id(collection);
+  assert!(collection_id == cap.collection_id, ENotOwner);
   let layer_type = dynamic_field::borrow<TypeKey<LayerType>, LayerType>(&collection.id, TypeKey<LayerType>{`type`: layer_type});
+
+  if(!collection.item_types.contains(&ItemType{collection_id, `type`: *layer_type, item_type, img_url})) {
+    collection.item_types.insert(ItemType{collection_id, `type`: *layer_type, item_type, img_url});
+  };
+
   Item {
     id: object::new(ctx),
     `type`: *layer_type,      
