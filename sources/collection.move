@@ -329,6 +329,15 @@ public fun add_config_to_type<Type: store + copy + drop>(collection: &mut Collec
   dynamic_field::add(&mut collection.id, ConfigKey<Type>{`type`, name}, Config{name, content});
 }
 
+public fun update_config_to_type<Type: store + copy + drop>(collection: &mut Collection, cap: &CollectionCap, `type`: String, name: String, content: String) {
+  let collection_id = object::id(collection);
+  assert!(collection_id == cap.collection_id, ENotOwner);
+
+  assert!(dynamic_field::exists_(&collection.id, TypeKey<Type>{`type`}), ENotExistType);
+  let config = dynamic_field::borrow_mut<ConfigKey<Type>, Config>(&mut collection.id, ConfigKey<Type>{`type`, name});
+  config.content = content;
+}
+
 public fun add_selection_to_supplyer<Product: store>(
   collection: &Collection,
   supplyer: &mut Supplyer,
