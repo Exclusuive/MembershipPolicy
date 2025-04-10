@@ -172,6 +172,15 @@ entry fun default(name: String, ctx: &mut TxContext) {
   transfer::transfer(col_cap, ctx.sender());
 }
 
+#[allow(lint(share_owned))]
+entry fun create_supplyer(collection: &Collection, cap: &CollectionCap, ctx: &mut TxContext) {
+  assert!(object::id(collection) == cap.collection_id, ENotOwner);
+
+  let (supplyer, supplyer_cap) = new_supplyer(collection, ctx);
+  transfer::share_object(supplyer);
+  transfer::transfer(supplyer_cap, ctx.sender());
+}
+
 entry fun mint_and_tranfer_base(collection: &Collection, cap: &CollectionCap, img_url: String, recipient: address, ctx: &mut TxContext) {
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
@@ -496,6 +505,22 @@ fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   (
     collection,
     CollectionCap { id: object::new(ctx), collection_id },
+  )
+}
+
+fun new_supplyer(collection: &Collection, ctx: &mut TxContext): (Supplyer, SupplyerCap){
+  let id = object::new(ctx);
+  let supplyer_id = id.to_inner();
+  // event::emit(CollectionPolicyCreated<T> { id: policy_id });
+  (
+    Supplyer{
+      id,
+      collection_id: object::id(collection),
+      selections: vector<Selection>[],
+      size: 0,
+      balance: balance::zero(),
+    },
+    SupplyerCap { id: object::new(ctx), supplyer_id },
   )
 }
 
