@@ -357,7 +357,7 @@ public fun add_selection_to_supplyer<Product: store>(
   ) {
     let collection_id = object::id(collection);
     assert!(collection_id == supplyer.collection_id, EInvalidCollection);
-    assert!(collection_id == cap.supplyer_id, ENotOwner);
+    assert!(object::id(supplyer) == cap.supplyer_id, ENotOwner);
 
   let selection = Selection{
     number: supplyer.selections.length(),
