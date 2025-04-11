@@ -40,6 +40,7 @@ public struct CollectionCap has key, store {
 public struct Supplier has key, store {
   id: UID,
   collection_id: ID,
+  name: String,
   selections: vector<Selection>,
   size: u64,
   balance: Balance<SUI>,
@@ -180,10 +181,10 @@ entry fun default(name: String, ctx: &mut TxContext) {
 }
 
 #[allow(lint(share_owned))]
-entry fun create_supplier(collection: &Collection, cap: &CollectionCap, ctx: &mut TxContext) {
+entry fun create_supplier(collection: &Collection, cap: &CollectionCap, name: String, ctx: &mut TxContext) {
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
-  let (supplier, supplier_cap) = new_supplier(collection, ctx);
+  let (supplier, supplier_cap) = new_supplier(collection, name, ctx);
   transfer::share_object(supplier);
   transfer::transfer(supplier_cap, ctx.sender());
 }
@@ -528,7 +529,7 @@ fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   )
 }
 
-fun new_supplier(collection: &Collection, ctx: &mut TxContext): (Supplier, SupplierCap){
+fun new_supplier(collection: &Collection, name: String, ctx: &mut TxContext): (Supplier, SupplierCap){
   let id = object::new(ctx);
   let supplier_id = id.to_inner();
   // event::emit(CollectionPolicyCreated<T> { id: policy_id });
@@ -536,6 +537,7 @@ fun new_supplier(collection: &Collection, ctx: &mut TxContext): (Supplier, Suppl
     Supplier{
       id,
       collection_id: object::id(collection),
+      name,
       selections: vector<Selection>[],
       size: 0,
       balance: balance::zero(),
