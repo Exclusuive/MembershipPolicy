@@ -14,7 +14,7 @@ use sui::package;
 
 const ENotOwner: u64 = 1;
 const EInvalidCollection: u64 = 2;
-const EInvalidSupplyer: u64 = 3;
+const EInvalidSupplier: u64 = 3;
 const ENotExistType: u64 = 4;
 const ENotEnoughPaid: u64 = 5;
 const EIllegalRule: u64 = 6;
@@ -37,7 +37,7 @@ public struct CollectionCap has key, store {
   collection_id: ID
 }
 
-public struct Supplyer has key, store {
+public struct Supplier has key, store {
   id: UID,
   collection_id: ID,
   selections: vector<Selection>,
@@ -45,9 +45,9 @@ public struct Supplyer has key, store {
   balance: Balance<SUI>,
 }
 
-public struct SupplyerCap has key, store {
+public struct SupplierCap has key, store {
   id: UID,
-  supplyer_id: ID
+  supplier_id: ID
 }
 
 public struct Selection has store {
@@ -63,7 +63,7 @@ public struct Condition has store, copy, drop {
 }
 
 public struct SelectRequest {
-  supplyer_id: ID,
+  supplier_id: ID,
   selection_number: u64,
   paid: u64,
   receipts: VecMap<TicketType, u64>,
@@ -180,12 +180,12 @@ entry fun default(name: String, ctx: &mut TxContext) {
 }
 
 #[allow(lint(share_owned))]
-entry fun create_supplyer(collection: &Collection, cap: &CollectionCap, ctx: &mut TxContext) {
+entry fun create_supplier(collection: &Collection, cap: &CollectionCap, ctx: &mut TxContext) {
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
-  let (supplyer, supplyer_cap) = new_supplyer(collection, ctx);
-  transfer::share_object(supplyer);
-  transfer::transfer(supplyer_cap, ctx.sender());
+  let (supplier, supplier_cap) = new_supplier(collection, ctx);
+  transfer::share_object(supplier);
+  transfer::transfer(supplier_cap, ctx.sender());
 }
 
 entry fun mint_and_tranfer_base(collection: &Collection, cap: &CollectionCap, img_url: String, recipient: address, ctx: &mut TxContext) {
@@ -349,84 +349,84 @@ public fun update_config_to_type<Type: store + copy + drop>(collection: &mut Col
   config.content = content;
 }
 
-public fun add_selection_to_supplyer<Product: store>(
+public fun add_selection_to_supplier<Product: store>(
   collection: &Collection,
-  supplyer: &mut Supplyer,
-  cap: &SupplyerCap,
+  supplier: &mut Supplier,
+  cap: &SupplierCap,
   price: u64
   ) {
     let collection_id = object::id(collection);
-    assert!(collection_id == supplyer.collection_id, EInvalidCollection);
-    assert!(object::id(supplyer) == cap.supplyer_id, ENotOwner);
+    assert!(collection_id == supplier.collection_id, EInvalidCollection);
+    assert!(object::id(supplier) == cap.supplier_id, ENotOwner);
 
   let selection = Selection{
-    number: supplyer.selections.length(),
+    number: supplier.selections.length(),
     conditions: vector<Condition>[],
     price,
     product: type_name::get<Product>()
   };
 
-  dynamic_field::add(&mut supplyer.id, ProductKey{selection_number: supplyer.selections.length()}, vector<Product>[]);
+  dynamic_field::add(&mut supplier.id, ProductKey{selection_number: supplier.selections.length()}, vector<Product>[]);
 
-  supplyer.selections.push_back(selection);
-  supplyer.size = supplyer.selections.length();
+  supplier.selections.push_back(selection);
+  supplier.size = supplier.selections.length();
 }
 
-public fun add_product_to_supplyer<Product: store>(
+public fun add_product_to_supplier<Product: store>(
   collection: &Collection,
-  supplyer: &mut Supplyer,
-  cap: &SupplyerCap,
+  supplier: &mut Supplier,
+  cap: &SupplierCap,
   selection_number: u64, 
   product: Product
   ) {
     let collection_id = object::id(collection);
-    assert!(collection_id == supplyer.collection_id, EInvalidCollection);
-    assert!(collection_id == cap.supplyer_id, ENotOwner);
+    assert!(collection_id == supplier.collection_id, EInvalidCollection);
+    assert!(collection_id == cap.supplier_id, ENotOwner);
 
-    supplyer.selections.borrow(selection_number);
+    supplier.selections.borrow(selection_number);
 
-    dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut supplyer.id, ProductKey{selection_number})
+    dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut supplier.id, ProductKey{selection_number})
     .push_back(product);
 }
 
-public fun add_balance_to_supplyer(
+public fun add_balance_to_supplier(
   collection: &Collection,
-  supplyer: &mut Supplyer,
-  cap: &SupplyerCap,
+  supplier: &mut Supplier,
+  cap: &SupplierCap,
   request: &mut SelectRequest, 
   coin: Coin<SUI> ) {
     let collection_id = object::id(collection);
-    assert!(collection_id == supplyer.collection_id, EInvalidCollection);
-    assert!(collection_id == cap.supplyer_id, ENotOwner);
+    assert!(collection_id == supplier.collection_id, EInvalidCollection);
+    assert!(collection_id == cap.supplier_id, ENotOwner);
 
     request.paid = request.paid + coin.value();
-    supplyer.balance.join(coin.into_balance());
+    supplier.balance.join(coin.into_balance());
 }
 
 public fun borrow_selection(
   collection: &Collection,
-  supplyer: &Supplyer,
-  cap: &SupplyerCap,
+  supplier: &Supplier,
+  cap: &SupplierCap,
   index: u64
   ): &Selection {
     let collection_id = object::id(collection);
-    assert!(collection_id == supplyer.collection_id, EInvalidCollection);
-    assert!(collection_id == cap.supplyer_id, ENotOwner);
+    assert!(collection_id == supplier.collection_id, EInvalidCollection);
+    assert!(collection_id == cap.supplier_id, ENotOwner);
 
-    supplyer.selections.borrow(index)
+    supplier.selections.borrow(index)
 }
 
 public fun borrow_mut_selection(
   collection: &Collection,
-  supplyer: &mut Supplyer,
-  cap: &SupplyerCap,
+  supplier: &mut Supplier,
+  cap: &SupplierCap,
   index: u64
   ): &mut Selection {
     let collection_id = object::id(collection);
-    assert!(collection_id == supplyer.collection_id, EInvalidCollection);
-    assert!(collection_id == cap.supplyer_id, ENotOwner);
+    assert!(collection_id == supplier.collection_id, EInvalidCollection);
+    assert!(collection_id == cap.supplier_id, ENotOwner);
 
-    supplyer.selections.borrow_mut(index)
+    supplier.selections.borrow_mut(index)
 }
 
 public fun add_condition_to_selection(
@@ -444,12 +444,12 @@ public fun add_condition_to_selection(
 // ============================= Public Package Functions
 public fun new_request(
   collection: &Collection,
-  supplyer: &mut Supplyer,
+  supplier: &mut Supplier,
   selection_number: u64
   ): SelectRequest {
-    assert!(object::id(collection) == supplyer.collection_id, EInvalidCollection);
+    assert!(object::id(collection) == supplier.collection_id, EInvalidCollection);
     SelectRequest {
-      supplyer_id: object::id(supplyer),
+      supplier_id: object::id(supplier),
       selection_number,
       paid: 0,
       receipts: vec_map::empty<TicketType, u64>()
@@ -458,12 +458,12 @@ public fun new_request(
 
 public fun burn_ticket(
     collection: &Collection,
-    supplyer: &Supplyer,
+    supplier: &Supplier,
     request: &mut SelectRequest, 
     ticket: Ticket 
   ) {
-    assert!(object::id(collection) == supplyer.collection_id, EInvalidCollection);
-    assert!(object::id(supplyer) == request.supplyer_id, EInvalidSupplyer);
+    assert!(object::id(collection) == supplier.collection_id, EInvalidCollection);
+    assert!(object::id(supplier) == request.supplier_id, EInvalidSupplier);
 
     let Ticket {`type`} = ticket;
     let (key, value) = request.receipts.remove(&`type`);
@@ -472,14 +472,14 @@ public fun burn_ticket(
 
 public fun confirm_request<Product: store>(
     collection: &Collection,
-    supplyer: &mut Supplyer,
+    supplier: &mut Supplier,
     request: SelectRequest, 
 ): (ID, u64, Product) {
-    assert!(object::id(collection) == supplyer.collection_id, EInvalidCollection);
-    assert!(object::id(supplyer) == request.supplyer_id, EInvalidSupplyer);
+    assert!(object::id(collection) == supplier.collection_id, EInvalidCollection);
+    assert!(object::id(supplier) == request.supplier_id, EInvalidSupplier);
 
-    let SelectRequest { supplyer_id, selection_number, paid, receipts } = request;
-    let selection = &supplyer.selections[selection_number];
+    let SelectRequest { supplier_id, selection_number, paid, receipts } = request;
+    let selection = &supplier.selections[selection_number];
 
     assert!(selection.price == paid, ENotEnoughPaid);
 
@@ -496,10 +496,10 @@ public fun confirm_request<Product: store>(
         total = total - 1;
     };
 
-    let product = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut supplyer.id, ProductKey{selection_number})
+    let product = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut supplier.id, ProductKey{selection_number})
     .pop_back();
 
-    (supplyer_id, paid, product)
+    (supplier_id, paid, product)
 }
 
 // ======================== Private Functions 
@@ -528,19 +528,19 @@ fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   )
 }
 
-fun new_supplyer(collection: &Collection, ctx: &mut TxContext): (Supplyer, SupplyerCap){
+fun new_supplier(collection: &Collection, ctx: &mut TxContext): (Supplier, SupplierCap){
   let id = object::new(ctx);
-  let supplyer_id = id.to_inner();
+  let supplier_id = id.to_inner();
   // event::emit(CollectionPolicyCreated<T> { id: policy_id });
   (
-    Supplyer{
+    Supplier{
       id,
       collection_id: object::id(collection),
       selections: vector<Selection>[],
       size: 0,
       balance: balance::zero(),
     },
-    SupplyerCap { id: object::new(ctx), supplyer_id },
+    SupplierCap { id: object::new(ctx), supplier_id },
   )
 }
 
