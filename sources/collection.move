@@ -350,6 +350,18 @@ public fun update_config_to_type<Type: store + copy + drop>(collection: &mut Col
   config.content = content;
 }
 
+public fun update_layer_order(collection: &mut Collection, cap: &CollectionCap, i: u64, j: u64) {
+    let collection_id = object::id(collection);
+    assert!(collection_id == cap.collection_id, ENotOwner);
+
+    let mut lt = collection.layer_types.into_keys();
+    lt.swap(i, j);
+
+    collection.layer_types = vec_set::from_keys(lt);
+
+    collection.update_version();
+}
+
 public fun add_selection_to_supplier<Product: store>(
   collection: &Collection,
   supplier: &mut Supplier,
