@@ -329,7 +329,7 @@ public fun add_ticket_type(collection: &mut Collection, cap: &CollectionCap, `ty
     assert!(collection_id == cap.collection_id, ENotOwner);
 
     collection.ticket_types.insert(TicketType{collection_id, `type`});
-    dynamic_field::add(&mut collection.id, TypeKey<PropertyType> {`type`}, PropertyType{collection_id, `type`});
+    dynamic_field::add(&mut collection.id, TypeKey<TicketType> {`type`}, TicketType{collection_id, `type`});
     collection.update_version();
 }
 
@@ -379,7 +379,7 @@ public fun add_selection_to_supplier<Product: store>(
     product: type_name::get<Product>()
   };
 
-  dynamic_field::add(&mut supplier.id, ProductKey{selection_number: supplier.selections.length()}, vector<Product>[]);
+  dynamic_field::add(&mut supplier.id, ProductKey{selection_number: selection.number}, vector<Product>[]);
 
   supplier.selections.push_back(selection);
   supplier.size = supplier.selections.length();
@@ -394,7 +394,7 @@ public fun add_product_to_supplier<Product: store>(
   ) {
     let collection_id = object::id(collection);
     assert!(collection_id == supplier.collection_id, EInvalidCollection);
-    assert!(collection_id == cap.supplier_id, ENotOwner);
+    assert!(object::id(supplier) == cap.supplier_id, ENotOwner);
 
     supplier.selections.borrow(selection_number);
 
@@ -410,7 +410,7 @@ public fun add_balance_to_supplier(
   coin: Coin<SUI> ) {
     let collection_id = object::id(collection);
     assert!(collection_id == supplier.collection_id, EInvalidCollection);
-    assert!(collection_id == cap.supplier_id, ENotOwner);
+    assert!(object::id(supplier) == cap.supplier_id, ENotOwner);
 
     request.paid = request.paid + coin.value();
     supplier.balance.join(coin.into_balance());
@@ -424,7 +424,7 @@ public fun borrow_selection(
   ): &Selection {
     let collection_id = object::id(collection);
     assert!(collection_id == supplier.collection_id, EInvalidCollection);
-    assert!(collection_id == cap.supplier_id, ENotOwner);
+    assert!(object::id(supplier) == cap.supplier_id, ENotOwner);
 
     supplier.selections.borrow(index)
 }
@@ -437,21 +437,26 @@ public fun borrow_mut_selection(
   ): &mut Selection {
     let collection_id = object::id(collection);
     assert!(collection_id == supplier.collection_id, EInvalidCollection);
-    assert!(collection_id == cap.supplier_id, ENotOwner);
+    assert!(object::id(supplier) == cap.supplier_id, ENotOwner);
 
     supplier.selections.borrow_mut(index)
 }
 
 public fun add_condition_to_selection(
   collection: &Collection,
-  selection: &mut Selection, 
+  supplier: &mut Supplier,
+  cap: &SupplierCap,
+  index: u64,
+  // selection: &mut Selection, 
   ticket_type: String,
   requirement: u64
   ) {
-  selection.conditions.push_back(Condition{
-    ticket_type: TicketType{collection_id: object::id(collection), `type`: ticket_type},
-    requirement
-  })
+    let selection = borrow_mut_selection(collection, supplier, cap, index);
+
+    selection.conditions.push_back(Condition{
+      ticket_type: TicketType{collection_id: object::id(collection), `type`: ticket_type},
+      requirement
+    })
 } 
 
 // ============================= Public Package Functions
