@@ -11,6 +11,7 @@ use sui::vec_set::{Self, VecSet};
 use sui::vec_map::{Self, VecMap};
 use sui::display::{Self};
 use sui::package;
+use sui::event;
 
 const ENotOwner: u64 = 1;
 const EInvalidCollection: u64 = 2;
@@ -70,7 +71,15 @@ public struct SelectRequest {
   receipts: VecMap<TicketType, u64>,
 }
 
+// Collection Event 
+// -----------------------------------------------
+public struct CollectionCreated has copy, drop {
+  id: ID
+}
 
+public struct SupplierCreated has copy, drop {
+  id: ID
+}
 // Collection Metadata 
 // -----------------------------------------------
 public struct BaseType has store, copy, drop {
@@ -447,7 +456,6 @@ public fun add_condition_to_selection(
   supplier: &mut Supplier,
   cap: &SupplierCap,
   index: u64,
-  // selection: &mut Selection, 
   ticket_type: String,
   requirement: u64
   ) {
@@ -525,7 +533,7 @@ public fun confirm_request<Product: store>(
 fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   let id = object::new(ctx);
   let collection_id = id.to_inner();
-  // event::emit(CollectionPolicyCreated<T> { id: policy_id });
+  event::emit(CollectionCreated { id: collection_id });
   let mut collection = 
     Collection { 
       id, 
@@ -549,7 +557,7 @@ fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
 fun new_supplier(collection: &Collection, name: String, ctx: &mut TxContext): (Supplier, SupplierCap){
   let id = object::new(ctx);
   let supplier_id = id.to_inner();
-  // event::emit(CollectionPolicyCreated<T> { id: policy_id });
+  event::emit(SupplierCreated { id: supplier_id });
   (
     Supplier{
       id,
