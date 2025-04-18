@@ -80,6 +80,10 @@ public struct CollectionCreated has copy, drop {
 public struct SupplierCreated has copy, drop {
   id: ID
 }
+
+public struct ItemCreated has copy, drop {
+  id: ID
+}
 // Collection Metadata 
 // -----------------------------------------------
 public struct BaseType has store, copy, drop {
@@ -291,9 +295,11 @@ public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type
   if(!collection.item_types.contains(&ItemType{collection_id, `type`: *layer_type, item_type, img_url})) {
     collection.item_types.insert(ItemType{collection_id, `type`: *layer_type, item_type, img_url});
   };
+  let item_id = object::new(ctx);
+  event::emit(ItemCreated { id: item_id.to_inner() });
 
   Item {
-    id: object::new(ctx),
+    id: item_id,
     `type`: *layer_type,      
     item_type,
     img_url
@@ -500,7 +506,7 @@ public fun confirm_request<Product: store>(
     collection: &Collection,
     supplier: &mut Supplier,
     request: SelectRequest, 
-): (ID, u64, Product) {
+): Product {
     assert!(object::id(collection) == supplier.collection_id, EInvalidCollection);
     assert!(object::id(supplier) == request.supplier_id, EInvalidSupplier);
 
@@ -525,7 +531,7 @@ public fun confirm_request<Product: store>(
     let product = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut supplier.id, ProductKey{selection_number})
     .pop_back();
 
-    (supplier_id, paid, product)
+    product
 }
 
 // ======================== Private Functions 
