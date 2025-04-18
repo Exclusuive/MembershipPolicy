@@ -143,7 +143,8 @@ public struct Property has store {
   value: u64
 }
 
-public struct Ticket has store {
+public struct Ticket has key, store {
+  id: UID,
   `type`: TicketType, 
 }
 
@@ -254,6 +255,7 @@ public fun attach_property_to_item(collection: &Collection, item: &mut Item, pro
   dynamic_field::add(&mut item.id, TypeKey<PropertyType>{`type`: property.`type`.`type`}, property)
 }
 
+// Ticket 오브젝트 되면서 없애도 되나?
 public fun add_ticket_to_base(
     collection: &Collection,
     base: &mut Base,
@@ -269,7 +271,8 @@ public fun add_ticket_to_base(
     ticket_bag.push_back(ticket);
 }
 
-public fun pop_ticket_from_membership( base: &mut Base, `type`: String): Ticket {
+// Ticket 오브젝트 되면서 없애도 되나?
+public fun pop_ticket_from_base(base: &mut Base, `type`: String): Ticket {
     let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut base.id, TicketBagKey{`type`});
     ticket_bag.pop_back()
 }
@@ -313,11 +316,14 @@ public fun new_property(collection: &Collection, cap: &CollectionCap, `type`: St
   Property {`type`: *property_type, value}
 }
 
-public fun new_ticket(collection: &Collection, cap: &CollectionCap, `type`: String): Ticket { 
+public fun new_ticket(collection: &Collection, cap: &CollectionCap, `type`: String, ctx: &mut TxContext): Ticket { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
   let ticket_type = dynamic_field::borrow<TypeKey<TicketType>, TicketType>(&collection.id, TypeKey<TicketType>{`type`});
-  Ticket {`type`: *ticket_type}
+  Ticket {
+    id: object::new(ctx),
+    `type`: *ticket_type
+  }
 }
 
 
@@ -497,7 +503,8 @@ public fun burn_ticket(
     assert!(object::id(collection) == store.collection_id, EInvalidCollection);
     assert!(object::id(store) == request.store_id, EInvalidStore);
 
-    let Ticket {`type`} = ticket;
+    let Ticket {id, `type`} = ticket;
+    id.delete();
     let (key, value) = request.receipts.remove(&`type`);
     request.receipts.insert(key, value+1);
 }
