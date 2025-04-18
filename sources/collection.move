@@ -15,7 +15,7 @@ use sui::event;
 
 const ENotOwner: u64 = 1;
 const EInvalidCollection: u64 = 2;
-const EInvalidSupplier: u64 = 3;
+const EInvalidStore: u64 = 3;
 const ENotExistType: u64 = 4;
 const ENotEnoughPaid: u64 = 5;
 const EIllegalRule: u64 = 6;
@@ -38,7 +38,7 @@ public struct CollectionCap has key, store {
   collection_id: ID
 }
 
-public struct Supplier has key, store {
+public struct Store has key, store {
   id: UID,
   collection_id: ID,
   name: String,
@@ -47,9 +47,9 @@ public struct Supplier has key, store {
   balance: Balance<SUI>,
 }
 
-public struct SupplierCap has key, store {
+public struct StoreCap has key, store {
   id: UID,
-  supplier_id: ID
+  store_id: ID
 }
 
 public struct Selection has store {
@@ -65,7 +65,7 @@ public struct Condition has store, copy, drop {
 }
 
 public struct SelectRequest {
-  supplier_id: ID,
+  store_id: ID,
   selection_number: u64,
   paid: u64,
   receipts: VecMap<TicketType, u64>,
@@ -77,7 +77,7 @@ public struct CollectionCreated has copy, drop {
   id: ID
 }
 
-public struct SupplierCreated has copy, drop {
+public struct StoreCreated has copy, drop {
   id: ID
 }
 
@@ -194,12 +194,12 @@ entry fun default(name: String, ctx: &mut TxContext) {
 }
 
 #[allow(lint(share_owned))]
-entry fun create_supplier(collection: &Collection, cap: &CollectionCap, name: String, ctx: &mut TxContext) {
+entry fun create_store(collection: &Collection, cap: &CollectionCap, name: String, ctx: &mut TxContext) {
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
-  let (supplier, supplier_cap) = new_supplier(collection, name, ctx);
-  transfer::share_object(supplier);
-  transfer::transfer(supplier_cap, ctx.sender());
+  let (store, store_cap) = new_store(collection, name, ctx);
+  transfer::share_object(store);
+  transfer::transfer(store_cap, ctx.sender());
 }
 
 entry fun mint_and_tranfer_base(collection: &Collection, cap: &CollectionCap, img_url: String, recipient: address, ctx: &mut TxContext) {
@@ -377,95 +377,95 @@ public fun update_layer_order(collection: &mut Collection, cap: &CollectionCap, 
     collection.update_version();
 }
 
-public fun add_selection_to_supplier<Product: store>(
+public fun add_selection_to_store<Product: store>(
   collection: &Collection,
-  supplier: &mut Supplier,
-  cap: &SupplierCap,
+  store: &mut Store,
+  cap: &StoreCap,
   price: u64
   ) {
     let collection_id = object::id(collection);
-    assert!(collection_id == supplier.collection_id, EInvalidCollection);
-    assert!(object::id(supplier) == cap.supplier_id, ENotOwner);
+    assert!(collection_id == store.collection_id, EInvalidCollection);
+    assert!(object::id(store) == cap.store_id, ENotOwner);
 
   let selection = Selection{
-    number: supplier.selections.length(),
+    number: store.selections.length(),
     conditions: vector<Condition>[],
     price,
     product: type_name::get<Product>()
   };
 
-  dynamic_field::add(&mut supplier.id, ProductKey{selection_number: selection.number}, vector<Product>[]);
+  dynamic_field::add(&mut store.id, ProductKey{selection_number: selection.number}, vector<Product>[]);
 
-  supplier.selections.push_back(selection);
-  supplier.size = supplier.selections.length();
+  store.selections.push_back(selection);
+  store.size = store.selections.length();
 }
 
-public fun add_product_to_supplier<Product: store>(
+public fun add_product_to_store<Product: store>(
   collection: &Collection,
-  supplier: &mut Supplier,
-  cap: &SupplierCap,
+  store: &mut Store,
+  cap: &StoreCap,
   selection_number: u64, 
   product: Product
   ) {
     let collection_id = object::id(collection);
-    assert!(collection_id == supplier.collection_id, EInvalidCollection);
-    assert!(object::id(supplier) == cap.supplier_id, ENotOwner);
+    assert!(collection_id == store.collection_id, EInvalidCollection);
+    assert!(object::id(store) == cap.store_id, ENotOwner);
 
-    supplier.selections.borrow(selection_number);
+    store.selections.borrow(selection_number);
 
-    dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut supplier.id, ProductKey{selection_number})
+    dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, ProductKey{selection_number})
     .push_back(product);
 }
 
-public fun add_balance_to_supplier(
+public fun add_balance_to_store(
   collection: &Collection,
-  supplier: &mut Supplier,
-  cap: &SupplierCap,
+  store: &mut Store,
+  cap: &StoreCap,
   request: &mut SelectRequest, 
   coin: Coin<SUI> ) {
     let collection_id = object::id(collection);
-    assert!(collection_id == supplier.collection_id, EInvalidCollection);
-    assert!(object::id(supplier) == cap.supplier_id, ENotOwner);
+    assert!(collection_id == store.collection_id, EInvalidCollection);
+    assert!(object::id(store) == cap.store_id, ENotOwner);
 
     request.paid = request.paid + coin.value();
-    supplier.balance.join(coin.into_balance());
+    store.balance.join(coin.into_balance());
 }
 
 public fun borrow_selection(
   collection: &Collection,
-  supplier: &Supplier,
-  cap: &SupplierCap,
+  store: &Store,
+  cap: &StoreCap,
   index: u64
   ): &Selection {
     let collection_id = object::id(collection);
-    assert!(collection_id == supplier.collection_id, EInvalidCollection);
-    assert!(object::id(supplier) == cap.supplier_id, ENotOwner);
+    assert!(collection_id == store.collection_id, EInvalidCollection);
+    assert!(object::id(store) == cap.store_id, ENotOwner);
 
-    supplier.selections.borrow(index)
+    store.selections.borrow(index)
 }
 
 public fun borrow_mut_selection(
   collection: &Collection,
-  supplier: &mut Supplier,
-  cap: &SupplierCap,
+  store: &mut Store,
+  cap: &StoreCap,
   index: u64
   ): &mut Selection {
     let collection_id = object::id(collection);
-    assert!(collection_id == supplier.collection_id, EInvalidCollection);
-    assert!(object::id(supplier) == cap.supplier_id, ENotOwner);
+    assert!(collection_id == store.collection_id, EInvalidCollection);
+    assert!(object::id(store) == cap.store_id, ENotOwner);
 
-    supplier.selections.borrow_mut(index)
+    store.selections.borrow_mut(index)
 }
 
 public fun add_condition_to_selection(
   collection: &Collection,
-  supplier: &mut Supplier,
-  cap: &SupplierCap,
+  store: &mut Store,
+  cap: &StoreCap,
   index: u64,
   ticket_type: String,
   requirement: u64
   ) {
-    let selection = borrow_mut_selection(collection, supplier, cap, index);
+    let selection = borrow_mut_selection(collection, store, cap, index);
 
     selection.conditions.push_back(Condition{
       ticket_type: TicketType{collection_id: object::id(collection), `type`: ticket_type},
@@ -476,12 +476,12 @@ public fun add_condition_to_selection(
 // ============================= Public Package Functions
 public fun new_request(
   collection: &Collection,
-  supplier: &mut Supplier,
+  store: &mut Store,
   selection_number: u64
   ): SelectRequest {
-    assert!(object::id(collection) == supplier.collection_id, EInvalidCollection);
+    assert!(object::id(collection) == store.collection_id, EInvalidCollection);
     SelectRequest {
-      supplier_id: object::id(supplier),
+      store_id: object::id(store),
       selection_number,
       paid: 0,
       receipts: vec_map::empty<TicketType, u64>()
@@ -490,12 +490,12 @@ public fun new_request(
 
 public fun burn_ticket(
     collection: &Collection,
-    supplier: &Supplier,
+    store: &Store,
     request: &mut SelectRequest, 
     ticket: Ticket 
   ) {
-    assert!(object::id(collection) == supplier.collection_id, EInvalidCollection);
-    assert!(object::id(supplier) == request.supplier_id, EInvalidSupplier);
+    assert!(object::id(collection) == store.collection_id, EInvalidCollection);
+    assert!(object::id(store) == request.store_id, EInvalidStore);
 
     let Ticket {`type`} = ticket;
     let (key, value) = request.receipts.remove(&`type`);
@@ -504,14 +504,14 @@ public fun burn_ticket(
 
 public fun confirm_request<Product: store>(
     collection: &Collection,
-    supplier: &mut Supplier,
+    store: &mut Store,
     request: SelectRequest, 
 ): Product {
-    assert!(object::id(collection) == supplier.collection_id, EInvalidCollection);
-    assert!(object::id(supplier) == request.supplier_id, EInvalidSupplier);
+    assert!(object::id(collection) == store.collection_id, EInvalidCollection);
+    assert!(object::id(store) == request.store_id, EInvalidStore);
 
-    let SelectRequest { supplier_id, selection_number, paid, receipts } = request;
-    let selection = &supplier.selections[selection_number];
+    let SelectRequest { store_id, selection_number, paid, receipts } = request;
+    let selection = &store.selections[selection_number];
 
     assert!(selection.price == paid, ENotEnoughPaid);
 
@@ -528,7 +528,7 @@ public fun confirm_request<Product: store>(
         total = total - 1;
     };
 
-    let product = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut supplier.id, ProductKey{selection_number})
+    let product = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, ProductKey{selection_number})
     .pop_back();
 
     product
@@ -560,12 +560,12 @@ fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   )
 }
 
-fun new_supplier(collection: &Collection, name: String, ctx: &mut TxContext): (Supplier, SupplierCap){
+fun new_store(collection: &Collection, name: String, ctx: &mut TxContext): (Store, StoreCap){
   let id = object::new(ctx);
-  let supplier_id = id.to_inner();
-  event::emit(SupplierCreated { id: supplier_id });
+  let store_id = id.to_inner();
+  event::emit(StoreCreated { id: store_id });
   (
-    Supplier{
+    Store{
       id,
       collection_id: object::id(collection),
       name,
@@ -573,7 +573,7 @@ fun new_supplier(collection: &Collection, name: String, ctx: &mut TxContext): (S
       size: 0,
       balance: balance::zero(),
     },
-    SupplierCap { id: object::new(ctx), supplier_id },
+    StoreCap { id: object::new(ctx), store_id },
   )
 }
 
