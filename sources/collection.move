@@ -42,7 +42,7 @@ public struct Store has key, store {
   id: UID,
   collection_id: ID,
   name: String,
-  selections: vector<Selection>,
+  slots: vector<Slot>,
   size: u64,
   balance: Balance<SUI>,
 }
@@ -52,7 +52,7 @@ public struct StoreCap has key, store {
   store_id: ID
 }
 
-public struct Selection has store {
+public struct Slot has store {
   number: u64,
   conditions: vector<Condition>,
   price: u64,
@@ -66,7 +66,7 @@ public struct Condition has store, copy, drop {
 
 public struct SelectRequest {
   store_id: ID,
-  selection_number: u64,
+  slot_number: u64,
   paid: u64,
   receipts: VecMap<TicketType, u64>,
 }
@@ -161,7 +161,7 @@ public struct TicketBagKey has store, copy, drop {
 }
 
 public struct ProductKey has store, copy, drop{
-  selection_number: u64
+  slot_number: u64
 }
 
 public struct ConfigKey<phantom Type: store + copy + drop> has store, copy, drop {
@@ -377,7 +377,7 @@ public fun update_layer_order(collection: &mut Collection, cap: &CollectionCap, 
     collection.update_version();
 }
 
-public fun add_selection_to_store<Product: store>(
+public fun add_slot_to_store<Product: store>(
   collection: &Collection,
   store: &mut Store,
   cap: &StoreCap,
@@ -387,33 +387,33 @@ public fun add_selection_to_store<Product: store>(
     assert!(collection_id == store.collection_id, EInvalidCollection);
     assert!(object::id(store) == cap.store_id, ENotOwner);
 
-  let selection = Selection{
-    number: store.selections.length(),
+  let slot = Slot{
+    number: store.slots.length(),
     conditions: vector<Condition>[],
     price,
     product: type_name::get<Product>()
   };
 
-  dynamic_field::add(&mut store.id, ProductKey{selection_number: selection.number}, vector<Product>[]);
+  dynamic_field::add(&mut store.id, ProductKey{slot_number: slot.number}, vector<Product>[]);
 
-  store.selections.push_back(selection);
-  store.size = store.selections.length();
+  store.slots.push_back(slot);
+  store.size = store.slots.length();
 }
 
 public fun add_product_to_store<Product: store>(
   collection: &Collection,
   store: &mut Store,
   cap: &StoreCap,
-  selection_number: u64, 
+  slot_number: u64, 
   product: Product
   ) {
     let collection_id = object::id(collection);
     assert!(collection_id == store.collection_id, EInvalidCollection);
     assert!(object::id(store) == cap.store_id, ENotOwner);
 
-    store.selections.borrow(selection_number);
+    store.slots.borrow(slot_number);
 
-    dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, ProductKey{selection_number})
+    dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, ProductKey{slot_number})
     .push_back(product);
 }
 
@@ -431,33 +431,33 @@ public fun add_balance_to_store(
     store.balance.join(coin.into_balance());
 }
 
-public fun borrow_selection(
+public fun borrow_slot(
   collection: &Collection,
   store: &Store,
   cap: &StoreCap,
   index: u64
-  ): &Selection {
+  ): &Slot {
     let collection_id = object::id(collection);
     assert!(collection_id == store.collection_id, EInvalidCollection);
     assert!(object::id(store) == cap.store_id, ENotOwner);
 
-    store.selections.borrow(index)
+    store.slots.borrow(index)
 }
 
-public fun borrow_mut_selection(
+public fun borrow_mut_slot(
   collection: &Collection,
   store: &mut Store,
   cap: &StoreCap,
   index: u64
-  ): &mut Selection {
+  ): &mut Slot {
     let collection_id = object::id(collection);
     assert!(collection_id == store.collection_id, EInvalidCollection);
     assert!(object::id(store) == cap.store_id, ENotOwner);
 
-    store.selections.borrow_mut(index)
+    store.slots.borrow_mut(index)
 }
 
-public fun add_condition_to_selection(
+public fun add_condition_to_slot(
   collection: &Collection,
   store: &mut Store,
   cap: &StoreCap,
@@ -465,9 +465,9 @@ public fun add_condition_to_selection(
   ticket_type: String,
   requirement: u64
   ) {
-    let selection = borrow_mut_selection(collection, store, cap, index);
+    let slot = borrow_mut_slot(collection, store, cap, index);
 
-    selection.conditions.push_back(Condition{
+    slot.conditions.push_back(Condition{
       ticket_type: TicketType{collection_id: object::id(collection), `type`: ticket_type},
       requirement
     })
@@ -477,12 +477,12 @@ public fun add_condition_to_selection(
 public fun new_request(
   collection: &Collection,
   store: &mut Store,
-  selection_number: u64
+  slot_number: u64
   ): SelectRequest {
     assert!(object::id(collection) == store.collection_id, EInvalidCollection);
     SelectRequest {
       store_id: object::id(store),
-      selection_number,
+      slot_number,
       paid: 0,
       receipts: vec_map::empty<TicketType, u64>()
     }
@@ -510,13 +510,13 @@ public fun confirm_request<Product: store>(
     assert!(object::id(collection) == store.collection_id, EInvalidCollection);
     assert!(object::id(store) == request.store_id, EInvalidStore);
 
-    let SelectRequest { store_id, selection_number, paid, receipts } = request;
-    let selection = &store.selections[selection_number];
+    let SelectRequest { store_id, slot_number, paid, receipts } = request;
+    let slot = &store.slots[slot_number];
 
-    assert!(selection.price == paid, ENotEnoughPaid);
+    assert!(slot.price == paid, ENotEnoughPaid);
 
-    let mut completed = selection.conditions;
-    let mut total = selection.conditions.length();
+    let mut completed = slot.conditions;
+    let mut total = slot.conditions.length();
 
     while (total > 0) {
         let condition = completed.pop_back();
@@ -528,7 +528,7 @@ public fun confirm_request<Product: store>(
         total = total - 1;
     };
 
-    let product = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, ProductKey{selection_number})
+    let product = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, ProductKey{slot_number})
     .pop_back();
 
     product
@@ -569,7 +569,7 @@ fun new_store(collection: &Collection, name: String, ctx: &mut TxContext): (Stor
       id,
       collection_id: object::id(collection),
       name,
-      selections: vector<Selection>[],
+      slots: vector<Slot>[],
       size: 0,
       balance: balance::zero(),
     },
