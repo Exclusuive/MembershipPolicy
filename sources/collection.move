@@ -12,6 +12,7 @@ use sui::vec_map::{Self, VecMap};
 use sui::display::{Self};
 use sui::package;
 use sui::event;
+// use sui::transfer_policy;
 
 const ENotOwner: u64 = 1;
 const EInvalidCollection: u64 = 2;
@@ -505,8 +506,12 @@ public fun burn_ticket(
 
     let Ticket {id, `type`} = ticket;
     id.delete();
+
+    if (!request.receipts.contains(&`type`)) {
+      request.receipts.insert(`type`, 0 as u64)
+    };
     let (key, value) = request.receipts.remove(&`type`);
-    request.receipts.insert(key, value+1);
+    request.receipts.insert(key, value + 1);
 }
 
 public fun confirm_request<Product: store>(
@@ -515,25 +520,23 @@ public fun confirm_request<Product: store>(
     request: SelectRequest, 
 ): Product {
     assert!(object::id(collection) == store.collection_id, EInvalidCollection);
-    assert!(object::id(store) == request.store_id, EInvalidStore);
 
     let SelectRequest { store_id, slot_number, paid, receipts } = request;
-    let slot = &store.slots[slot_number];
+    assert!(object::id(store) == store_id, EInvalidStore);
 
+    let slot = &store.slots[slot_number];
     assert!(slot.price == paid, ENotEnoughPaid);
 
     let mut completed = slot.conditions;
     let mut total = slot.conditions.length();
 
     while (total > 0) {
-        let condition = completed.pop_back();
+      let condition = completed.pop_back();
+      let burned_tickets = *receipts.get<TicketType, u64>(&condition.ticket_type);
+      assert!(burned_tickets == condition.requirement, EIllegalRule);
 
-        let ticket_type = condition.ticket_type;
-        let burned_tickets = *receipts.get(&ticket_type);
-        assert!(burned_tickets == condition.requirement, EIllegalRule);
-
-        total = total - 1;
-    };
+      total = total - 1;
+  };
 
     let product = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, ProductKey{slot_number})
     .pop_back();
