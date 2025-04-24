@@ -12,6 +12,7 @@ use sui::vec_map::{Self, VecMap};
 use sui::display::{Self};
 use sui::package;
 use sui::event;
+
 // use sui::transfer_policy;
 
 const ENotOwner: u64 = 1;
@@ -144,6 +145,11 @@ public struct Property has store {
   value: u64
 }
 
+public struct PropertyScroll has key, store {
+  id: UID,
+  property: Property
+}
+
 public struct Ticket has key, store {
   id: UID,
   `type`: TicketType, 
@@ -250,9 +256,11 @@ public fun pop_item_from_bag(base: &mut Base, `type`: String): Item{
   .pop_back()
 }
 
-public fun attach_property_to_item(collection: &Collection, item: &mut Item, property: Property) {
+public fun attach_property_to_item(collection: &Collection, item: &mut Item, property_scroll: PropertyScroll) {
   assert!(object::id(collection) == item.`type`.collection_id, EInvalidCollection);
 
+  let PropertyScroll {id, property} = property_scroll;
+  id.delete();
   dynamic_field::add(&mut item.id, TypeKey<PropertyType>{`type`: property.`type`.`type`}, property)
 }
 
@@ -310,11 +318,15 @@ public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type
   }
 }
 
-public fun new_property(collection: &Collection, cap: &CollectionCap, `type`: String, value: u64): Property { 
+public fun new_property_scroll(collection: &Collection, cap: &CollectionCap, `type`: String, value: u64, ctx: &mut TxContext): PropertyScroll { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
   let property_type = dynamic_field::borrow<TypeKey<PropertyType>, PropertyType>(&collection.id, TypeKey<PropertyType>{`type`});
-  Property {`type`: *property_type, value}
+  let property = Property {`type`: *property_type, value};
+  PropertyScroll {
+    id: object::new(ctx),
+    property
+  }
 }
 
 public fun new_ticket(collection: &Collection, cap: &CollectionCap, `type`: String, ctx: &mut TxContext): Ticket { 
@@ -384,7 +396,7 @@ public fun update_layer_order(collection: &mut Collection, cap: &CollectionCap, 
     collection.update_version();
 }
 
-public fun add_slot_to_store<Product: store>(
+public fun add_slot_to_store<Product: key + store>(
   collection: &Collection,
   store: &mut Store,
   cap: &StoreCap,
@@ -407,7 +419,7 @@ public fun add_slot_to_store<Product: store>(
   store.size = store.slots.length();
 }
 
-public fun add_product_to_store<Product: store>(
+public fun add_product_to_store<Product: key + store>(
   collection: &Collection,
   store: &mut Store,
   cap: &StoreCap,
@@ -480,7 +492,7 @@ public fun add_condition_to_slot(
     })
 } 
 
-// ============================= Public Package Functions
+// ============================= Request Functions
 public fun new_request(
   collection: &Collection,
   store: &mut Store,
@@ -514,7 +526,7 @@ public fun burn_ticket(
     request.receipts.insert(key, value + 1);
 }
 
-public fun confirm_request<Product: store>(
+public fun confirm_request<Product: key + store>(
     collection: &Collection,
     store: &mut Store,
     request: SelectRequest, 
@@ -544,9 +556,8 @@ public fun confirm_request<Product: store>(
     product
 }
 
-// ======================== Private Functions 
-
-fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
+// ============================= Public Package Functions
+public (package) fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   let id = object::new(ctx);
   let collection_id = id.to_inner();
   event::emit(CollectionCreated { id: collection_id });
@@ -570,7 +581,7 @@ fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   )
 }
 
-fun new_store(collection: &Collection, name: String, ctx: &mut TxContext): (Store, StoreCap){
+public (package) fun new_store(collection: &Collection, name: String, ctx: &mut TxContext): (Store, StoreCap){
   let id = object::new(ctx);
   let store_id = id.to_inner();
   event::emit(StoreCreated { id: store_id });
