@@ -13,6 +13,9 @@ use sui::display::{Self};
 use sui::package;
 use sui::event;
 
+// #[test_only]
+// use std::debug;
+
 // use sui::transfer_policy;
 
 const ENotOwner: u64 = 1;
@@ -413,7 +416,8 @@ public fun add_slot_to_store<Product: key + store>(
     product: type_name::get<Product>()
   };
 
-  dynamic_field::add(&mut store.id, ProductKey{slot_number: slot.number}, vector<Product>[]);
+  let key = ProductKey{slot_number: slot.number};
+  dynamic_field::add(&mut store.id, key, vector<Product>[]);
 
   store.slots.push_back(slot);
   store.size = store.slots.length();
@@ -432,7 +436,8 @@ public fun add_product_to_store<Product: key + store>(
 
     store.slots.borrow(slot_number);
 
-    dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, ProductKey{slot_number})
+    let key = ProductKey{slot_number};
+    dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, key)
     .push_back(product);
 }
 
@@ -480,11 +485,11 @@ public fun add_condition_to_slot(
   collection: &Collection,
   store: &mut Store,
   cap: &StoreCap,
-  index: u64,
+  slot_number: u64,
   ticket_type: String,
   requirement: u64
   ) {
-    let slot = borrow_mut_slot(collection, store, cap, index);
+    let slot = borrow_mut_slot(collection, store, cap, slot_number);
 
     slot.conditions.push_back(Condition{
       ticket_type: TicketType{collection_id: object::id(collection), `type`: ticket_type},
@@ -533,8 +538,8 @@ public fun confirm_request<Product: key + store>(
 ): Product {
     assert!(object::id(collection) == store.collection_id, EInvalidCollection);
 
-    let SelectRequest { store_id, slot_number, paid, receipts } = request;
-    assert!(object::id(store) == store_id, EInvalidStore);
+    assert!(object::id(store) == request.store_id, EInvalidStore);
+    let SelectRequest { store_id: _, slot_number, paid, receipts } = request;
 
     let slot = &store.slots[slot_number];
     assert!(slot.price == paid, ENotEnoughPaid);
@@ -550,9 +555,9 @@ public fun confirm_request<Product: key + store>(
       total = total - 1;
   };
 
-    let product = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, ProductKey{slot_number})
-    .pop_back();
-
+    let key = ProductKey{slot_number};
+    let product_vec = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, key);
+    let product = product_vec.pop_back();
     product
 }
 
