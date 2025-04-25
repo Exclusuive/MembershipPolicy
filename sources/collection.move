@@ -441,20 +441,6 @@ public fun add_product_to_store<Product: key + store>(
     .push_back(product);
 }
 
-public fun add_balance_to_store(
-  collection: &Collection,
-  store: &mut Store,
-  cap: &StoreCap,
-  request: &mut SelectRequest, 
-  coin: Coin<SUI> ) {
-    let collection_id = object::id(collection);
-    assert!(collection_id == store.collection_id, EInvalidCollection);
-    assert!(object::id(store) == cap.store_id, ENotOwner);
-
-    request.paid = request.paid + coin.value();
-    store.balance.join(coin.into_balance());
-}
-
 public fun borrow_slot(
   collection: &Collection,
   store: &Store,
@@ -530,6 +516,19 @@ public fun burn_ticket(
     let (key, value) = request.receipts.remove(&`type`);
     request.receipts.insert(key, value + 1);
 }
+
+public fun add_balance_to_store(
+  collection: &Collection,
+  store: &mut Store,
+  request: &mut SelectRequest, 
+  coin: Coin<SUI> ) {
+    let collection_id = object::id(collection);
+    assert!(collection_id == store.collection_id, EInvalidCollection);
+
+    request.paid = request.paid + coin.value();
+    store.balance.join(coin.into_balance());
+}
+
 
 public fun confirm_request<Product: key + store>(
     collection: &Collection,
