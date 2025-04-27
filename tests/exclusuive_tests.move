@@ -3,6 +3,7 @@ module exclusuive::exclusuive_tests;
 // uncomment this line to import the module
 use exclusuive::collection::{Self, Item, PropertyScroll, Ticket, LayerType, PropertyType, TicketType};
 use std::debug;
+use sui::coin;
 
 
 public struct EXCLUSUIVE_TESTS has drop {}
@@ -41,7 +42,7 @@ fun test_collection() {
     //0
     collection::add_slot_to_store<Ticket>(&collection, &mut store, &store_cap, 0);
     //1
-    collection::add_slot_to_store<PropertyScroll>(&collection, &mut store, &store_cap, 0);
+    collection::add_slot_to_store<PropertyScroll>(&collection, &mut store, &store_cap, 1000);
 
     // Slot에 Product 추가
     let ticket = collection::new_ticket(&collection, &col_cap, ticket_type, &mut ctx);
@@ -69,6 +70,8 @@ fun test_collection() {
         let slot_number = 1;
         let mut request = collection::new_request(&collection, &mut store, slot_number);
         collection::burn_ticket(&collection, &store, &mut request, ticket1_product);
+        let coin = coin::mint_for_testing(1000, &mut ctx);
+        collection::add_balance_to_store(&collection, &mut store, &mut request, coin);
         let propertyscroll1_product = collection::confirm_request<PropertyScroll>(&collection, &mut store, request);
 
         transfer::public_transfer(propertyscroll1_product, ctx.sender());
