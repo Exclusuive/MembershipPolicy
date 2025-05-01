@@ -387,6 +387,7 @@ public fun update_config_to_type<Type: store + copy + drop>(collection: &mut Col
   config.content = content;
 }
 
+/// 여기 first_index, index_to_go 를 파라미터로 받는게 좋겠다.
 public fun update_layer_order(collection: &mut Collection, cap: &CollectionCap, i: u64, j: u64) {
     let collection_id = object::id(collection);
     assert!(collection_id == cap.collection_id, ENotOwner);
