@@ -1,7 +1,7 @@
 #[test_only]
 module exclusuive::exclusuive_tests;
 // uncomment this line to import the module
-use exclusuive::collection::{Self, Item, PropertyScroll, Ticket, LayerType, PropertyType, TicketType};
+use exclusuive::collection::{Self, Item, PropertyScroll, Ticket, Base, LayerType, PropertyType, TicketType};
 use std::debug;
 use sui::coin;
 
@@ -43,6 +43,8 @@ fun test_collection() {
     collection::add_slot_to_store<Ticket>(&collection, &mut store, &store_cap, 0);
     //1
     collection::add_slot_to_store<PropertyScroll>(&collection, &mut store, &store_cap, 1000);
+    //2
+    collection::add_slot_to_store<Base>(&collection, &mut store, &store_cap, 0);
 
     // Slot에 Product 추가
     let ticket = collection::new_ticket(&collection, &col_cap, ticket_type, &mut ctx);
@@ -52,6 +54,12 @@ fun test_collection() {
     let property_scroll = collection::new_property_scroll(&collection, &col_cap, property_type, 3, &mut ctx);
     let slot_number = 1;
     collection::add_product_to_store(&collection, &mut store, &store_cap, slot_number, property_scroll);
+
+    // Base 도 Store 에 추가가 되네
+    let img_url = b"https://".to_string();
+    let base = collection::new_base(&collection, &col_cap, img_url, &mut ctx);
+    let slot_number = 2;
+    collection::add_product_to_store(&collection, &mut store, &store_cap, slot_number, base);
 
     // Slot에 Condition 추가
     let slot_number = 1;
