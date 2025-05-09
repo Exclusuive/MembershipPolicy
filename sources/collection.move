@@ -48,7 +48,6 @@ public struct Store has key, store {
   collection_id: ID,
   name: String,
   slots: vector<Slot>,
-  size: u64,
   balance: Balance<SUI>,
 }
 
@@ -105,7 +104,7 @@ public struct ItemType has store, copy, drop {
   collection_id: ID,
   `type`: LayerType, 
   item_type: String,
-  img_url: String
+  // img_url: String
 }
 
 public struct PropertyType has store, copy, drop {
@@ -140,7 +139,7 @@ public struct Item has key, store{
   id: UID,
   `type`: LayerType, 
   item_type: String,
-  img_url: String
+  // img_url: String
 }
 
 public struct Property has store {
@@ -220,12 +219,26 @@ entry fun mint_and_tranfer_base(collection: &Collection, cap: &CollectionCap, im
   transfer::transfer(base, recipient);
 }
 
-entry fun mint_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, recipient: address, ctx: &mut TxContext) { 
+// 추후 add_item_type으로 변경 하자...
+entry fun mint_new_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, recipient: address, ctx: &mut TxContext) { 
   let collection_id = object::id(collection);
   assert!(collection_id == cap.collection_id, ENotOwner);
   assert!(collection.layer_types.contains(&LayerType{collection_id, `type`: layer_type}), ENotExistType);
 
-  let item = new_item(collection, cap, layer_type, item_type, img_url, ctx);
+  let item = new_item(collection, cap, layer_type, item_type, ctx);
+
+  add_config_to_type<ItemType>(collection, cap, item_type, b"img_url".to_string(), img_url);
+  transfer::transfer(item, recipient)
+}
+
+entry fun mint_exist_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, recipient: address, ctx: &mut TxContext) { 
+  let collection_id = object::id(collection);
+  assert!(collection_id == cap.collection_id, ENotOwner);
+  assert!(collection.layer_types.contains(&LayerType{collection_id, `type`: layer_type}), ENotExistType);
+
+  // let img_url = dynamic_field::borrow<ConfigKey<ItemType>, Config>(&mut collection.id, ConfigKey<ItemType>{`type`: item_type, name: b"img_url".to_string()});
+
+  let item = new_item(collection, cap, layer_type, item_type, ctx);
   transfer::transfer(item, recipient)
 }
 
@@ -291,6 +304,29 @@ public fun pop_ticket_from_base(base: &mut Base, `type`: String): Ticket {
 
 
 // ======================== Admin Public Functions 
+public fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
+  let id = object::new(ctx);
+  let collection_id = id.to_inner();
+  event::emit(CollectionCreated { id: collection_id });
+  let mut collection = 
+    Collection { 
+      id, 
+      base_type: BaseType{collection_id, `type`: name},
+      layer_types: vec_set::empty<LayerType>(),
+      property_types: vec_set::empty<PropertyType>(),
+      ticket_types: vec_set::empty<TicketType>(),
+      item_types: vec_set::empty<ItemType>(),
+      balance: balance::zero(),
+      version: 0
+    };
+
+  dynamic_field::add(&mut collection.id, TypeKey<BaseType> {`type`: name}, BaseType{collection_id, `type`: name});
+
+  (
+    collection,
+    CollectionCap { id: object::new(ctx), collection_id },
+  )
+}
 public fun new_base(collection: &Collection, cap: &CollectionCap, img_url: String, ctx: &mut TxContext): Base { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
   let base = Base {
@@ -302,13 +338,17 @@ public fun new_base(collection: &Collection, cap: &CollectionCap, img_url: Strin
   base
 }
 
-public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, ctx: &mut TxContext): Item { 
+// public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, ctx: &mut TxContext): Item { 
+public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, ctx: &mut TxContext): Item { 
   let collection_id = object::id(collection);
   assert!(collection_id == cap.collection_id, ENotOwner);
   let layer_type = dynamic_field::borrow<TypeKey<LayerType>, LayerType>(&collection.id, TypeKey<LayerType>{`type`: layer_type});
 
-  if(!collection.item_types.contains(&ItemType{collection_id, `type`: *layer_type, item_type, img_url})) {
-    collection.item_types.insert(ItemType{collection_id, `type`: *layer_type, item_type, img_url});
+  // if(!collection.item_types.contains(&ItemType{collection_id, `type`: *layer_type, item_type, img_url})) {
+  //   collection.item_types.insert(ItemType{collection_id, `type`: *layer_type, item_type, img_url});
+  // };
+  if(!collection.item_types.contains(&ItemType{collection_id, `type`: *layer_type, item_type})) {
+    collection.item_types.insert(ItemType{collection_id, `type`: *layer_type, item_type});
   };
   let item_id = object::new(ctx);
   event::emit(ItemCreated { id: item_id.to_inner() });
@@ -317,7 +357,7 @@ public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type
     id: item_id,
     `type`: *layer_type,      
     item_type,
-    img_url
+    // img_url
   }
 }
 
@@ -421,7 +461,6 @@ public fun add_slot_to_store<Product: key + store>(
   dynamic_field::add(&mut store.id, key, vector<Product>[]);
 
   store.slots.push_back(slot);
-  store.size = store.slots.length();
 }
 
 public fun add_product_to_store<Product: key + store>(
@@ -562,29 +601,6 @@ public fun confirm_request<Product: key + store>(
 }
 
 // ============================= Public Package Functions
-public (package) fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
-  let id = object::new(ctx);
-  let collection_id = id.to_inner();
-  event::emit(CollectionCreated { id: collection_id });
-  let mut collection = 
-    Collection { 
-      id, 
-      base_type: BaseType{collection_id, `type`: name},
-      layer_types: vec_set::empty<LayerType>(),
-      property_types: vec_set::empty<PropertyType>(),
-      ticket_types: vec_set::empty<TicketType>(),
-      item_types: vec_set::empty<ItemType>(),
-      balance: balance::zero(),
-      version: 0
-    };
-
-  dynamic_field::add(&mut collection.id, TypeKey<BaseType> {`type`: name}, BaseType{collection_id, `type`: name});
-
-  (
-    collection,
-    CollectionCap { id: object::new(ctx), collection_id },
-  )
-}
 
 public (package) fun new_store(collection: &Collection, name: String, ctx: &mut TxContext): (Store, StoreCap){
   let id = object::new(ctx);
@@ -596,7 +612,6 @@ public (package) fun new_store(collection: &Collection, name: String, ctx: &mut 
       collection_id: object::id(collection),
       name,
       slots: vector<Slot>[],
-      size: 0,
       balance: balance::zero(),
     },
     StoreCap { id: object::new(ctx), store_id },
