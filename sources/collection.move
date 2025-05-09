@@ -219,19 +219,7 @@ entry fun mint_and_tranfer_base(collection: &Collection, cap: &CollectionCap, im
   transfer::transfer(base, recipient);
 }
 
-// 추후 add_item_type으로 변경 하자...
-entry fun mint_new_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, recipient: address, ctx: &mut TxContext) { 
-  let collection_id = object::id(collection);
-  assert!(collection_id == cap.collection_id, ENotOwner);
-  assert!(collection.layer_types.contains(&LayerType{collection_id, `type`: layer_type}), ENotExistType);
-
-  let item = new_item(collection, cap, layer_type, item_type, ctx);
-
-  add_config_to_type<ItemType>(collection, cap, item_type, b"img_url".to_string(), img_url);
-  transfer::transfer(item, recipient)
-}
-
-entry fun mint_exist_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, recipient: address, ctx: &mut TxContext) { 
+entry fun mint_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, recipient: address, ctx: &mut TxContext) { 
   let collection_id = object::id(collection);
   assert!(collection_id == cap.collection_id, ENotOwner);
   assert!(collection.layer_types.contains(&LayerType{collection_id, `type`: layer_type}), ENotExistType);
@@ -342,14 +330,10 @@ public fun new_base(collection: &Collection, cap: &CollectionCap, img_url: Strin
 public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, ctx: &mut TxContext): Item { 
   let collection_id = object::id(collection);
   assert!(collection_id == cap.collection_id, ENotOwner);
-  let layer_type = dynamic_field::borrow<TypeKey<LayerType>, LayerType>(&collection.id, TypeKey<LayerType>{`type`: layer_type});
 
-  // if(!collection.item_types.contains(&ItemType{collection_id, `type`: *layer_type, item_type, img_url})) {
-  //   collection.item_types.insert(ItemType{collection_id, `type`: *layer_type, item_type, img_url});
-  // };
-  if(!collection.item_types.contains(&ItemType{collection_id, `type`: *layer_type, item_type})) {
-    collection.item_types.insert(ItemType{collection_id, `type`: *layer_type, item_type});
-  };
+  let layer_type = dynamic_field::borrow<TypeKey<LayerType>, LayerType>(&collection.id, TypeKey<LayerType>{`type`: layer_type});
+  assert!(collection.item_types.contains(&ItemType{collection_id, `type`: *layer_type, item_type}), 100);
+
   let item_id = object::new(ctx);
   event::emit(ItemCreated { id: item_id.to_inner() });
 
@@ -389,6 +373,20 @@ public fun add_layer_type(collection: &mut Collection, cap: &CollectionCap, `typ
 
     collection.layer_types.insert(LayerType{collection_id, `type`});
     dynamic_field::add(&mut collection.id, TypeKey<LayerType> {`type`}, LayerType{collection_id, `type`});
+    collection.update_version();
+}
+
+public fun add_item_type(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String) {
+    let collection_id = object::id(collection);
+    assert!(collection_id == cap.collection_id, ENotOwner);
+    assert!(collection.layer_types.contains(&LayerType{collection_id, `type`: layer_type}), ENotExistType);
+
+    let layer_type = dynamic_field::borrow<TypeKey<LayerType>, LayerType>(&collection.id, TypeKey<LayerType>{`type`: layer_type});
+    collection.item_types.insert(ItemType{collection_id, `type`: *layer_type, item_type});
+        dynamic_field::add(&mut collection.id, TypeKey<ItemType> {`type`: item_type}, ItemType{collection_id, `type`: *layer_type, item_type});
+
+    add_config_to_type<ItemType>(collection, cap, item_type, b"img_url".to_string(), img_url);
+
     collection.update_version();
 }
 
