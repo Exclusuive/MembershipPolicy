@@ -139,7 +139,7 @@ public struct Item has key, store{
   id: UID,
   `type`: LayerType, 
   item_type: String,
-  // img_url: String
+  img_url: String
 }
 
 public struct Property has store {
@@ -337,11 +337,13 @@ public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type
   let item_id = object::new(ctx);
   event::emit(ItemCreated { id: item_id.to_inner() });
 
+  let img_url_cfg = dynamic_field::borrow<ConfigKey<ItemType>, Config>(&mut collection.id, ConfigKey<ItemType>{`type`: item_type, name: b"img_url".to_string()});
+
   Item {
     id: item_id,
     `type`: *layer_type,      
     item_type,
-    // img_url
+    img_url: img_url_cfg.content
   }
 }
 
