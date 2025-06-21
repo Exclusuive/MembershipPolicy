@@ -174,7 +174,7 @@ public struct ItemBagKey has store, copy, drop {
 }
 
 public struct TicketBagKey has store, copy, drop {
-  `type`: String
+  ticket_type: String
 }
 
 public struct ProductKey has store, copy, drop{
@@ -283,17 +283,17 @@ public fun add_ticket_to_chracter(
 ) {
     assert!(object::id(collection) == ticket.`type`.collection_id, EInvalidCollection);
 
-    if (!dynamic_field::exists_(&chracter.id, TicketBagKey{`type`: ticket.`type`.`type`})){
-      dynamic_field::add<TicketBagKey, vector<Ticket>>(&mut chracter.id, TicketBagKey{`type`: ticket.`type`.`type`}, vector<Ticket>[]);
+    if (!dynamic_field::exists_(&chracter.id, TicketBagKey{ticket_type: ticket.`type`.`type`})){
+      dynamic_field::add<TicketBagKey, vector<Ticket>>(&mut chracter.id, TicketBagKey{ticket_type: ticket.`type`.`type`}, vector<Ticket>[]);
     };
 
-    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut chracter.id, TicketBagKey{`type`: ticket.`type`.`type`});
+    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut chracter.id, TicketBagKey{ticket_type: ticket.`type`.`type`});
     ticket_bag.push_back(ticket);
 }
 
 // Ticket 오브젝트 되면서 없애도 되나?
 public fun pop_ticket_from_chracter(chracter: &mut Character, `type`: String): Ticket {
-    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut chracter.id, TicketBagKey{`type`});
+    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut chracter.id, TicketBagKey{ticket_type: `type`});
     ticket_bag.pop_back()
 }
 
