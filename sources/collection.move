@@ -20,7 +20,7 @@ use sui::event;
 
 const ENotOwner: u64 = 1;
 const EInvalidCollection: u64 = 2;
-const EInvalidStore: u64 = 3;
+const EInvalidMarket: u64 = 3;
 const ENotExistType: u64 = 4;
 const ENotEnoughPaid: u64 = 5;
 const EIllegalRule: u64 = 6;
@@ -29,9 +29,9 @@ public struct COLLECTION has drop {}
 
 public struct Collection has key, store {
   id: UID,
-  base_type: BaseType,
+  chracter_type: CharacterType,
   layer_types: VecSet<LayerType>,
-  property_types: VecSet<PropertyType>,
+  attribute_types: VecSet<AttributeType>,
   ticket_types: VecSet<TicketType>,
   item_types: VecSet<ItemType>,
   balance: Balance<SUI>,
@@ -43,20 +43,20 @@ public struct CollectionCap has key, store {
   collection_id: ID
 }
 
-public struct Store has key, store {
+public struct Market has key, store {
   id: UID,
   collection_id: ID,
   name: String,
-  slots: vector<Slot>,
+  listings: vector<Listing>,
   balance: Balance<SUI>,
 }
 
-public struct StoreCap has key, store {
+public struct MarketCap has key, store {
   id: UID,
-  store_id: ID
+  market_id: ID
 }
 
-public struct Slot has store {
+public struct Listing has store {
   number: u64,
   conditions: vector<Condition>,
   price: u64,
@@ -69,8 +69,8 @@ public struct Condition has store, copy, drop {
 }
 
 public struct SelectRequest {
-  store_id: ID,
-  slot_number: u64,
+  market_id: ID,
+  listing_number: u64,
   paid: u64,
   receipts: VecMap<TicketType, u64>,
 }
@@ -81,7 +81,7 @@ public struct CollectionCreated has copy, drop {
   id: ID
 }
 
-public struct StoreCreated has copy, drop {
+public struct MarketCreated has copy, drop {
   id: ID
 }
 
@@ -90,7 +90,7 @@ public struct ItemCreated has copy, drop {
 }
 // Collection Metadata 
 // -----------------------------------------------
-public struct BaseType has store, copy, drop {
+public struct CharacterType has store, copy, drop {
   collection_id: ID,
   `type`: String, 
 }
@@ -107,7 +107,7 @@ public struct ItemType has store, copy, drop {
   // img_url: String
 }
 
-public struct PropertyType has store, copy, drop {
+public struct AttributeType has store, copy, drop {
   collection_id: ID,
   `type`: String,
 }
@@ -124,9 +124,9 @@ public struct Config has store, copy, drop {
 
 // Object Struct 
 // -----------------------------------------------
-public struct Base has key, store {
+public struct Character has key, store {
   id: UID,
-  `type`: BaseType,
+  `type`: CharacterType,
   img_url: String,
 }
 
@@ -142,14 +142,14 @@ public struct Item has key, store{
   img_url: String
 }
 
-public struct Property has store {
-  `type`: PropertyType, 
+public struct Attribute has store {
+  `type`: AttributeType, 
   value: u64
 }
 
-public struct PropertyScroll has key, store {
+public struct AttributeScroll has key, store {
   id: UID,
-  property: Property
+  attribute: Attribute
 }
 
 public struct Ticket has key, store {
@@ -171,7 +171,7 @@ public struct TicketBagKey has store, copy, drop {
 }
 
 public struct ProductKey has store, copy, drop{
-  slot_number: u64
+  listing_number: u64
 }
 
 public struct ConfigKey<phantom Type: store + copy + drop> has store, copy, drop {
@@ -184,11 +184,11 @@ public struct ConfigKey<phantom Type: store + copy + drop> has store, copy, drop
 fun init(otw: COLLECTION, ctx: &mut TxContext) {
   let publisher = package::claim(otw, ctx);
 
-  let mut display = display::new<Base>(&publisher, ctx);
+  let mut display = display::new<Character>(&publisher, ctx);
   display.add(b"id".to_string(), b"{id}".to_string());
   display.add(b"name".to_string(), b"{type.name}".to_string());
   display.add(b"collection".to_string(), b"{type.collection_id}".to_string());
-  // display.add(b"description".to_string(), b"{base.description}".to_string());
+  // display.add(b"description".to_string(), b"{chracter.description}".to_string());
   display.add(b"img_url".to_string(), b"{img_url}".to_string());
   display.update_version();
 
@@ -204,19 +204,19 @@ entry fun default(name: String, ctx: &mut TxContext) {
 }
 
 #[allow(lint(share_owned))]
-entry fun create_store(collection: &Collection, cap: &CollectionCap, name: String, ctx: &mut TxContext) {
+entry fun create_market(collection: &Collection, cap: &CollectionCap, name: String, ctx: &mut TxContext) {
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
-  let (store, store_cap) = new_store(collection, name, ctx);
-  transfer::share_object(store);
-  transfer::transfer(store_cap, ctx.sender());
+  let (market, market_cap) = new_market(collection, name, ctx);
+  transfer::share_object(market);
+  transfer::transfer(market_cap, ctx.sender());
 }
 
-entry fun mint_and_tranfer_base(collection: &Collection, cap: &CollectionCap, img_url: String, recipient: address, ctx: &mut TxContext) {
+entry fun mint_and_tranfer_chracter(collection: &Collection, cap: &CollectionCap, img_url: String, recipient: address, ctx: &mut TxContext) {
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
-  let base = new_base(collection, cap, img_url, ctx);
-  transfer::transfer(base, recipient);
+  let chracter = new_chracter(collection, cap, img_url, ctx);
+  transfer::transfer(chracter, recipient);
 }
 
 entry fun mint_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, recipient: address, ctx: &mut TxContext) { 
@@ -231,19 +231,19 @@ entry fun mint_item(collection: &mut Collection, cap: &CollectionCap, layer_type
 }
 
 // ======================== User Public Functions
-public fun equip_item_to_base(collection: &Collection, base: &mut Base, item: Item){
-  assert!(object::id(collection) == base.`type`.collection_id, EInvalidCollection);
+public fun equip_item_to_chracter(collection: &Collection, chracter: &mut Character, item: Item){
+  assert!(object::id(collection) == chracter.`type`.collection_id, EInvalidCollection);
 
   let layer_type = item.`type`;
-  if (!dynamic_field::exists_<TypeKey<LayerType>>(&base.id, TypeKey<LayerType>{`type`: layer_type.`type`})){
-    dynamic_field::add(&mut base.id, TypeKey<LayerType>{`type`: layer_type.`type`}, ItemSocket{`type`: layer_type, socket: option::none<Item>()});
+  if (!dynamic_field::exists_<TypeKey<LayerType>>(&chracter.id, TypeKey<LayerType>{`type`: layer_type.`type`})){
+    dynamic_field::add(&mut chracter.id, TypeKey<LayerType>{`type`: layer_type.`type`}, ItemSocket{`type`: layer_type, socket: option::none<Item>()});
   };
 
-  if (!dynamic_field::exists_<ItemBagKey>(&base.id, ItemBagKey{`type`: layer_type.`type`})){
-    dynamic_field::add(&mut base.id, ItemBagKey{`type`: layer_type.`type`}, vector<Item>[]);
+  if (!dynamic_field::exists_<ItemBagKey>(&chracter.id, ItemBagKey{`type`: layer_type.`type`})){
+    dynamic_field::add(&mut chracter.id, ItemBagKey{`type`: layer_type.`type`}, vector<Item>[]);
   };
 
-  let layer = dynamic_field::borrow_mut<TypeKey<LayerType>, ItemSocket>(&mut base.id, TypeKey<LayerType>{`type`: layer_type.`type`});
+  let layer = dynamic_field::borrow_mut<TypeKey<LayerType>, ItemSocket>(&mut chracter.id, TypeKey<LayerType>{`type`: layer_type.`type`});
 
   if (layer.socket.is_none()) {
     layer.socket.fill(item);
@@ -251,42 +251,42 @@ public fun equip_item_to_base(collection: &Collection, base: &mut Base, item: It
   }; 
   
   let old_item = layer.socket.swap(item);
-  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut base.id, ItemBagKey{`type`: layer_type.`type`})
+  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut chracter.id, ItemBagKey{`type`: layer_type.`type`})
   .push_back(old_item);
 }
 
-public fun pop_item_from_bag(base: &mut Base, `type`: String): Item{
-  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut base.id, ItemBagKey{`type`})
+public fun pop_item_from_bag(chracter: &mut Character, `type`: String): Item{
+  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut chracter.id, ItemBagKey{`type`})
   .pop_back()
 }
 
-public fun attach_property_to_item(collection: &Collection, item: &mut Item, property_scroll: PropertyScroll) {
+public fun attach_attribute_to_item(collection: &Collection, item: &mut Item, attribute_scroll: AttributeScroll) {
   assert!(object::id(collection) == item.`type`.collection_id, EInvalidCollection);
 
-  let PropertyScroll {id, property} = property_scroll;
+  let AttributeScroll {id, attribute} = attribute_scroll;
   id.delete();
-  dynamic_field::add(&mut item.id, TypeKey<PropertyType>{`type`: property.`type`.`type`}, property)
+  dynamic_field::add(&mut item.id, TypeKey<AttributeType>{`type`: attribute.`type`.`type`}, attribute)
 }
 
 // Ticket 오브젝트 되면서 없애도 되나?
-public fun add_ticket_to_base(
+public fun add_ticket_to_chracter(
     collection: &Collection,
-    base: &mut Base,
+    chracter: &mut Character,
     ticket: Ticket,
 ) {
     assert!(object::id(collection) == ticket.`type`.collection_id, EInvalidCollection);
 
-    if (!dynamic_field::exists_(&base.id, TicketBagKey{`type`: ticket.`type`.`type`})){
-      dynamic_field::add<TicketBagKey, vector<Ticket>>(&mut base.id, TicketBagKey{`type`: ticket.`type`.`type`}, vector<Ticket>[]);
+    if (!dynamic_field::exists_(&chracter.id, TicketBagKey{`type`: ticket.`type`.`type`})){
+      dynamic_field::add<TicketBagKey, vector<Ticket>>(&mut chracter.id, TicketBagKey{`type`: ticket.`type`.`type`}, vector<Ticket>[]);
     };
 
-    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut base.id, TicketBagKey{`type`: ticket.`type`.`type`});
+    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut chracter.id, TicketBagKey{`type`: ticket.`type`.`type`});
     ticket_bag.push_back(ticket);
 }
 
 // Ticket 오브젝트 되면서 없애도 되나?
-public fun pop_ticket_from_base(base: &mut Base, `type`: String): Ticket {
-    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut base.id, TicketBagKey{`type`});
+public fun pop_ticket_from_chracter(chracter: &mut Character, `type`: String): Ticket {
+    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut chracter.id, TicketBagKey{`type`});
     ticket_bag.pop_back()
 }
 
@@ -299,31 +299,31 @@ public fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   let mut collection = 
     Collection { 
       id, 
-      base_type: BaseType{collection_id, `type`: name},
+      chracter_type: CharacterType{collection_id, `type`: name},
       layer_types: vec_set::empty<LayerType>(),
-      property_types: vec_set::empty<PropertyType>(),
+      attribute_types: vec_set::empty<AttributeType>(),
       ticket_types: vec_set::empty<TicketType>(),
       item_types: vec_set::empty<ItemType>(),
       balance: balance::zero(),
       version: 0
     };
 
-  dynamic_field::add(&mut collection.id, TypeKey<BaseType> {`type`: name}, BaseType{collection_id, `type`: name});
+  dynamic_field::add(&mut collection.id, TypeKey<CharacterType> {`type`: name}, CharacterType{collection_id, `type`: name});
 
   (
     collection,
     CollectionCap { id: object::new(ctx), collection_id },
   )
 }
-public fun new_base(collection: &Collection, cap: &CollectionCap, img_url: String, ctx: &mut TxContext): Base { 
+public fun new_chracter(collection: &Collection, cap: &CollectionCap, img_url: String, ctx: &mut TxContext): Character { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
-  let base = Base {
+  let chracter = Character {
     id: object::new(ctx),
-    `type`: collection.base_type,
+    `type`: collection.chracter_type,
     img_url
   };
 
-  base
+  chracter
 }
 
 // public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, ctx: &mut TxContext): Item { 
@@ -347,14 +347,14 @@ public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type
   }
 }
 
-public fun new_property_scroll(collection: &Collection, cap: &CollectionCap, `type`: String, value: u64, ctx: &mut TxContext): PropertyScroll { 
+public fun new_attribute_scroll(collection: &Collection, cap: &CollectionCap, `type`: String, value: u64, ctx: &mut TxContext): AttributeScroll { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
-  let property_type = dynamic_field::borrow<TypeKey<PropertyType>, PropertyType>(&collection.id, TypeKey<PropertyType>{`type`});
-  let property = Property {`type`: *property_type, value};
-  PropertyScroll {
+  let attribute_type = dynamic_field::borrow<TypeKey<AttributeType>, AttributeType>(&collection.id, TypeKey<AttributeType>{`type`});
+  let attribute = Attribute {`type`: *attribute_type, value};
+  AttributeScroll {
     id: object::new(ctx),
-    property
+    attribute
   }
 }
 
@@ -392,12 +392,12 @@ public fun add_item_type(collection: &mut Collection, cap: &CollectionCap, layer
     collection.update_version();
 }
 
-public fun add_property_type(collection: &mut Collection, cap: &CollectionCap, `type`: String) {
+public fun add_attribute_type(collection: &mut Collection, cap: &CollectionCap, `type`: String) {
     let collection_id = object::id(collection);
     assert!(collection_id == cap.collection_id, ENotOwner);
 
-    collection.property_types.insert(PropertyType{collection_id, `type`});
-    dynamic_field::add(&mut collection.id, TypeKey<PropertyType> {`type`}, PropertyType{collection_id, `type`});
+    collection.attribute_types.insert(AttributeType{collection_id, `type`});
+    dynamic_field::add(&mut collection.id, TypeKey<AttributeType> {`type`}, AttributeType{collection_id, `type`});
     collection.update_version();
 }
 
@@ -440,84 +440,84 @@ public fun update_layer_order(collection: &mut Collection, cap: &CollectionCap, 
     collection.update_version();
 }
 
-public fun add_slot_to_store<Product: key + store>(
+public fun add_listing_to_market<Product: key + store>(
   collection: &Collection,
-  store: &mut Store,
-  cap: &StoreCap,
+  market: &mut Market,
+  cap: &MarketCap,
   price: u64
   ) {
     let collection_id = object::id(collection);
-    assert!(collection_id == store.collection_id, EInvalidCollection);
-    assert!(object::id(store) == cap.store_id, ENotOwner);
+    assert!(collection_id == market.collection_id, EInvalidCollection);
+    assert!(object::id(market) == cap.market_id, ENotOwner);
 
-  let slot = Slot{
-    number: store.slots.length(),
+  let listing = Listing{
+    number: market.listings.length(),
     conditions: vector<Condition>[],
     price,
     product: type_name::get<Product>()
   };
 
-  let key = ProductKey{slot_number: slot.number};
-  dynamic_field::add(&mut store.id, key, vector<Product>[]);
+  let key = ProductKey{listing_number: listing.number};
+  dynamic_field::add(&mut market.id, key, vector<Product>[]);
 
-  store.slots.push_back(slot);
+  market.listings.push_back(listing);
 }
 
-public fun add_product_to_store<Product: key + store>(
+public fun add_product_to_market<Product: key + store>(
   collection: &Collection,
-  store: &mut Store,
-  cap: &StoreCap,
-  slot_number: u64, 
+  market: &mut Market,
+  cap: &MarketCap,
+  listing_number: u64, 
   product: Product
   ) {
     let collection_id = object::id(collection);
-    assert!(collection_id == store.collection_id, EInvalidCollection);
-    assert!(object::id(store) == cap.store_id, ENotOwner);
+    assert!(collection_id == market.collection_id, EInvalidCollection);
+    assert!(object::id(market) == cap.market_id, ENotOwner);
 
-    store.slots.borrow(slot_number);
+    market.listings.borrow(listing_number);
 
-    let key = ProductKey{slot_number};
-    dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, key)
+    let key = ProductKey{listing_number};
+    dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut market.id, key)
     .push_back(product);
 }
 
-public fun borrow_slot(
+public fun borrow_listing(
   collection: &Collection,
-  store: &Store,
-  cap: &StoreCap,
+  market: &Market,
+  cap: &MarketCap,
   index: u64
-  ): &Slot {
+  ): &Listing {
     let collection_id = object::id(collection);
-    assert!(collection_id == store.collection_id, EInvalidCollection);
-    assert!(object::id(store) == cap.store_id, ENotOwner);
+    assert!(collection_id == market.collection_id, EInvalidCollection);
+    assert!(object::id(market) == cap.market_id, ENotOwner);
 
-    store.slots.borrow(index)
+    market.listings.borrow(index)
 }
 
-public fun borrow_mut_slot(
+public fun borrow_mut_listing(
   collection: &Collection,
-  store: &mut Store,
-  cap: &StoreCap,
+  market: &mut Market,
+  cap: &MarketCap,
   index: u64
-  ): &mut Slot {
+  ): &mut Listing {
     let collection_id = object::id(collection);
-    assert!(collection_id == store.collection_id, EInvalidCollection);
-    assert!(object::id(store) == cap.store_id, ENotOwner);
+    assert!(collection_id == market.collection_id, EInvalidCollection);
+    assert!(object::id(market) == cap.market_id, ENotOwner);
 
-    store.slots.borrow_mut(index)
+    market.listings.borrow_mut(index)
 }
 
-public fun add_condition_to_slot(
+public fun add_condition_to_listing(
   collection: &Collection,
-  store: &mut Store,
-  cap: &StoreCap,
-  slot_number: u64,
+  market: &mut Market,
+  cap: &MarketCap,
+  listing_number: u64,
   ticket_type: String,
   requirement: u64
   ) {
-    let slot = borrow_mut_slot(collection, store, cap, slot_number);
+    let listing = borrow_mut_listing(collection, market, cap, listing_number);
 
-    slot.conditions.push_back(Condition{
+    listing.conditions.push_back(Condition{
       ticket_type: TicketType{collection_id: object::id(collection), `type`: ticket_type},
       requirement
     })
@@ -526,13 +526,13 @@ public fun add_condition_to_slot(
 // ============================= Request Functions
 public fun new_request(
   collection: &Collection,
-  store: &mut Store,
-  slot_number: u64
+  market: &mut Market,
+  listing_number: u64
   ): SelectRequest {
-    assert!(object::id(collection) == store.collection_id, EInvalidCollection);
+    assert!(object::id(collection) == market.collection_id, EInvalidCollection);
     SelectRequest {
-      store_id: object::id(store),
-      slot_number,
+      market_id: object::id(market),
+      listing_number,
       paid: 0,
       receipts: vec_map::empty<TicketType, u64>()
     }
@@ -540,12 +540,12 @@ public fun new_request(
 
 public fun burn_ticket(
     collection: &Collection,
-    store: &Store,
+    market: &Market,
     request: &mut SelectRequest, 
     ticket: Ticket 
   ) {
-    assert!(object::id(collection) == store.collection_id, EInvalidCollection);
-    assert!(object::id(store) == request.store_id, EInvalidStore);
+    assert!(object::id(collection) == market.collection_id, EInvalidCollection);
+    assert!(object::id(market) == request.market_id, EInvalidMarket);
 
     let Ticket {id, `type`} = ticket;
     id.delete();
@@ -557,34 +557,34 @@ public fun burn_ticket(
     request.receipts.insert(key, value + 1);
 }
 
-public fun add_balance_to_store(
+public fun add_balance_to_market(
   collection: &Collection,
-  store: &mut Store,
+  market: &mut Market,
   request: &mut SelectRequest, 
   coin: Coin<SUI> ) {
     let collection_id = object::id(collection);
-    assert!(collection_id == store.collection_id, EInvalidCollection);
+    assert!(collection_id == market.collection_id, EInvalidCollection);
 
     request.paid = request.paid + coin.value();
-    store.balance.join(coin.into_balance());
+    market.balance.join(coin.into_balance());
 }
 
 
 public fun confirm_request<Product: key + store>(
     collection: &Collection,
-    store: &mut Store,
+    market: &mut Market,
     request: SelectRequest, 
 ): Product {
-    assert!(object::id(collection) == store.collection_id, EInvalidCollection);
+    assert!(object::id(collection) == market.collection_id, EInvalidCollection);
 
-    assert!(object::id(store) == request.store_id, EInvalidStore);
-    let SelectRequest { store_id: _, slot_number, paid, receipts } = request;
+    assert!(object::id(market) == request.market_id, EInvalidMarket);
+    let SelectRequest { market_id: _, listing_number, paid, receipts } = request;
 
-    let slot = &store.slots[slot_number];
-    assert!(slot.price == paid, ENotEnoughPaid);
+    let listing = &market.listings[listing_number];
+    assert!(listing.price == paid, ENotEnoughPaid);
 
-    let mut completed = slot.conditions;
-    let mut total = slot.conditions.length();
+    let mut completed = listing.conditions;
+    let mut total = listing.conditions.length();
 
     while (total > 0) {
       let condition = completed.pop_back();
@@ -594,27 +594,27 @@ public fun confirm_request<Product: key + store>(
       total = total - 1;
   };
 
-    let key = ProductKey{slot_number};
-    let product_vec = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut store.id, key);
+    let key = ProductKey{listing_number};
+    let product_vec = dynamic_field::borrow_mut<ProductKey, vector<Product>>(&mut market.id, key);
     let product = product_vec.pop_back();
     product
 }
 
 // ============================= Public Package Functions
 
-public (package) fun new_store(collection: &Collection, name: String, ctx: &mut TxContext): (Store, StoreCap){
+public (package) fun new_market(collection: &Collection, name: String, ctx: &mut TxContext): (Market, MarketCap){
   let id = object::new(ctx);
-  let store_id = id.to_inner();
-  event::emit(StoreCreated { id: store_id });
+  let market_id = id.to_inner();
+  event::emit(MarketCreated { id: market_id });
   (
-    Store{
+    Market{
       id,
       collection_id: object::id(collection),
       name,
-      slots: vector<Slot>[],
+      listings: vector<Listing>[],
       balance: balance::zero(),
     },
-    StoreCap { id: object::new(ctx), store_id },
+    MarketCap { id: object::new(ctx), market_id },
   )
 }
 

@@ -1,7 +1,7 @@
 #[test_only]
 module exclusuive::exclusuive_tests;
 // uncomment this line to import the module
-use exclusuive::collection::{Self, Item, PropertyScroll, Ticket, Base, LayerType, PropertyType, TicketType};
+use exclusuive::collection::{Self, Item, AttributeScroll, Ticket, Character, LayerType, AttributeType, TicketType};
 use std::debug;
 use sui::coin;
 
@@ -42,9 +42,9 @@ fun test_collection() {
     //0
     collection::add_slot_to_store<Ticket>(&collection, &mut store, &store_cap, 0);
     //1
-    collection::add_slot_to_store<PropertyScroll>(&collection, &mut store, &store_cap, 1000);
+    collection::add_slot_to_store<AttributeScroll>(&collection, &mut store, &store_cap, 1000);
     //2
-    collection::add_slot_to_store<Base>(&collection, &mut store, &store_cap, 0);
+    collection::add_slot_to_store<Character>(&collection, &mut store, &store_cap, 0);
 
     // Slot에 Product 추가
     let ticket = collection::new_ticket(&collection, &col_cap, ticket_type, &mut ctx);
@@ -80,7 +80,7 @@ fun test_collection() {
         collection::burn_ticket(&collection, &store, &mut request, ticket1_product);
         let coin = coin::mint_for_testing(1000, &mut ctx);
         collection::add_balance_to_store(&collection, &mut store, &mut request, coin);
-        let propertyscroll1_product = collection::confirm_request<PropertyScroll>(&collection, &mut store, request);
+        let propertyscroll1_product = collection::confirm_request<AttributeScroll>(&collection, &mut store, request);
 
         transfer::public_transfer(propertyscroll1_product, ctx.sender());
     };
