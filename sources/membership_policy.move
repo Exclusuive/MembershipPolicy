@@ -40,7 +40,6 @@ public struct Market<phantom T: key> has key, store {
   id: UID,
   policy_id: ID,
   listings: vector<Listing>,
-  size: u64,
   balance: Balance<SUI>,
 }
 
@@ -95,14 +94,9 @@ public struct Membership<phantom T: key> has key, store {
   policy_id: ID
 }
 
-// public struct ItemSocket<phantom LayerType: drop, Config: store + copy + drop> has store {
-//   socket: Option<Item<LayerType>>,
-//   cfg: Config
-// }
 public struct ItemSocket<phantom LayerType: drop> has store {
   socket: Option<Item<LayerType>>,
 }
-
 
 public struct Item<phantom LayerType: drop> has key, store {
   id: UID,
@@ -145,8 +139,8 @@ public struct ItemBagKey<phantom LayerType: drop> has store, copy, drop{}
 
 public struct TicketBagKey<phantom TicketType: drop> has store, drop, copy {}
 
-// Types
-public struct TypeConfigKey has store, copy, drop{}
+// // Types
+// public struct TypeConfigKey has store, copy, drop{}
 
 // Market
 public struct ProductKey has store, copy, drop{
@@ -184,33 +178,33 @@ public fun new_market<T: key>(
     let id = object::new(ctx);
     let market_id = id.to_inner();
 
-  event::emit(MarketCreated<T> { id: market_id });
+    event::emit(MarketCreated<T> { id: market_id });
     (
       Market<T> {
         id,
         policy_id: object::id(policy),
         listings: vector<Listing>[],
-        size: 0,
         balance: balance::zero()
       },
       MarketCap<T> { id: object::new(ctx), market_id }
     )
 }
 
-public fun new_item<LayerType: drop, Config: store + copy + drop>(
+public fun new_item<T: key, LayerType: drop>(
   _: LayerType,
   item_type: String,
   img_url: String,
-  cfg: Config,
   ctx: &mut TxContext,
 ): Item<LayerType> {
-    let mut item = Item<LayerType> {
+    let item = Item<LayerType> {
       id: object::new(ctx),
       item_type,
       img_url,
     };
 
-    dynamic_field::add(&mut item.id, TypeConfigKey{}, cfg);
+    let item_id = object::id(&item);
+    event::emit(ItemCreated<T> { id: item_id });
+
     item
 }
 
@@ -227,11 +221,16 @@ public fun new_attribute_scroll<AttributeType: drop>(
   }
 }
 
-public fun new_ticket<TicketType: drop>(
+public fun new_ticket<T:key, TicketType: drop>(
   _: TicketType,
   ctx: &mut TxContext,
 ): Ticket<TicketType> {
-  Ticket<TicketType> {id: object::new(ctx)}
+    let ticket = Ticket<TicketType> {id: object::new(ctx)};
+
+    let ticket_id = object::id(&ticket);
+    event::emit(TicketCreated<T> { id: ticket_id });
+
+    ticket
 }
 
 
@@ -314,8 +313,10 @@ public fun retrieve_item_from_item_bag<T: key, LayerType: drop>(
 
 public fun attatch_attribute_to_item<LayerType: drop, AttributeType: drop>(
     item: &mut Item<LayerType>,
-    attribute: Attribute<AttributeType>
+    attribute_scroll: AttributeScroll<AttributeType>
 ) {
+    let AttributeScroll {id, attribute} = attribute_scroll;
+    id.delete();
     dynamic_field::add(&mut item.id, AttributeKey<AttributeType>{}, attribute);
 }
 
@@ -368,10 +369,8 @@ public fun register_item_type<T: key, LayerType: drop, Config: store + copy + dr
     cfg: Config,
 ) {
     assert!(object::id(policy) == cap.policy_id, ENotOwner);
-    assert!(has_layer<T, LayerType>(policy), 10);
+    assert!(has_layer<T, LayerType>(policy), ENotHasLayer);
 
-    let layer_type = type_name::get<LayerType>();
-    policy.layer_types.insert(layer_type);
     dynamic_field::add(&mut policy.id, ItemKey<LayerType> {item_type}, cfg);
     policy.update_version_policy();
 }
@@ -402,19 +401,6 @@ public fun register_ticket_type<T: key, TicketType: drop, Config: store + copy +
     policy.update_version_policy();
 }
 
-
-public fun register_config_to_type<T: key, Type: drop>(
-  _: Type,
-  name: String, 
-  content: String
-  ) {
-  // let collection_id = object::id(collection);
-  // assert!(collection_id == cap.collection_id, ENotOwner);
-
-  // assert!(dynamic_field::exists_(&collection.id, TypeKey<Type>{`type`}), ENotExistType);
-  // dynamic_field::add(&mut collection.id, TypeConfigKey<Type>{`type`, name}, TypeConfig{name, content});
-}
-
 // =======================================================
 // ======================== Public Functions For Membership Admin Package : Market Functions
 // =======================================================
@@ -430,7 +416,6 @@ public fun register_listing_to_market<T: key, Product: store>(market: &mut Marke
   dynamic_field::add(&mut market.id, ProductKey{listing_number: market.listings.length()}, vector<Product>[]);
 
   market.listings.push_back(listing);
-  market.size = market.listings.length();
 }
 
 public fun register_purchase_condition_to_listing<TicketType: drop>(listing: &mut Listing, requirement: u64) {
@@ -457,7 +442,6 @@ public fun borrow_mut_listing<T: key>(market: &mut Market<T>, cap: &MarketCap<T>
   assert!(object::id(market) == cap.market_id, ENotOwner);
   market.listings.borrow_mut(index)
 }
-
 
 // =======================================================
 // ======================== User Public Functions : Purchase Functions
