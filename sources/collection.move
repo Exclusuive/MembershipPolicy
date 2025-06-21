@@ -85,7 +85,15 @@ public struct MarketCreated has copy, drop {
   id: ID
 }
 
+public struct CharacterCreated has copy, drop {
+  id: ID
+}
+
 public struct ItemCreated has copy, drop {
+  id: ID
+}
+
+public struct TicketCreated has copy, drop {
   id: ID
 }
 // Collection Metadata 
@@ -104,7 +112,6 @@ public struct ItemType has store, copy, drop {
   collection_id: ID,
   `type`: LayerType, 
   item_type: String,
-  // img_url: String
 }
 
 public struct AttributeType has store, copy, drop {
