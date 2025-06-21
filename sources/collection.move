@@ -68,7 +68,7 @@ public struct Condition has store, copy, drop {
   requirement: u64,
 }
 
-public struct SelectRequest {
+public struct PurchaseRequest {
   market_id: ID,
   listing_number: u64,
   paid: u64,
@@ -528,9 +528,9 @@ public fun new_request(
   collection: &Collection,
   market: &mut Market,
   listing_number: u64
-  ): SelectRequest {
+  ): PurchaseRequest {
     assert!(object::id(collection) == market.collection_id, EInvalidCollection);
-    SelectRequest {
+    PurchaseRequest {
       market_id: object::id(market),
       listing_number,
       paid: 0,
@@ -541,7 +541,7 @@ public fun new_request(
 public fun burn_ticket(
     collection: &Collection,
     market: &Market,
-    request: &mut SelectRequest, 
+    request: &mut PurchaseRequest, 
     ticket: Ticket 
   ) {
     assert!(object::id(collection) == market.collection_id, EInvalidCollection);
@@ -560,7 +560,7 @@ public fun burn_ticket(
 public fun add_balance_to_market(
   collection: &Collection,
   market: &mut Market,
-  request: &mut SelectRequest, 
+  request: &mut PurchaseRequest, 
   coin: Coin<SUI> ) {
     let collection_id = object::id(collection);
     assert!(collection_id == market.collection_id, EInvalidCollection);
@@ -573,12 +573,12 @@ public fun add_balance_to_market(
 public fun confirm_request<Product: key + store>(
     collection: &Collection,
     market: &mut Market,
-    request: SelectRequest, 
+    request: PurchaseRequest, 
 ): Product {
     assert!(object::id(collection) == market.collection_id, EInvalidCollection);
 
     assert!(object::id(market) == request.market_id, EInvalidMarket);
-    let SelectRequest { market_id: _, listing_number, paid, receipts } = request;
+    let PurchaseRequest { market_id: _, listing_number, paid, receipts } = request;
 
     let listing = &market.listings[listing_number];
     assert!(listing.price == paid, ENotEnoughPaid);
