@@ -124,7 +124,7 @@ public struct TicketType has store, copy, drop {
   `type`: String,
 }
 
-public struct Config has store, copy, drop {
+public struct TypeConfig has store, copy, drop {
   name: String,
   content: String
 }
@@ -181,7 +181,7 @@ public struct ProductKey has store, copy, drop{
   listing_number: u64
 }
 
-public struct ConfigKey<phantom Type: store + copy + drop> has store, copy, drop {
+public struct TypeConfigKey<phantom Type: store + copy + drop> has store, copy, drop {
   `type`: String,
   name: String,
 }
@@ -231,7 +231,7 @@ entry fun mint_item(collection: &mut Collection, cap: &CollectionCap, layer_type
   assert!(collection_id == cap.collection_id, ENotOwner);
   assert!(collection.layer_types.contains(&LayerType{collection_id, `type`: layer_type}), ENotExistType);
 
-  // let img_url = dynamic_field::borrow<ConfigKey<ItemType>, Config>(&mut collection.id, ConfigKey<ItemType>{`type`: item_type, name: b"img_url".to_string()});
+  // let img_url = dynamic_field::borrow<TypeConfigKey<ItemType>, TypeConfig>(&mut collection.id, TypeConfigKey<ItemType>{`type`: item_type, name: b"img_url".to_string()});
 
   let item = new_item(collection, cap, layer_type, item_type, ctx);
   transfer::transfer(item, recipient)
@@ -344,7 +344,7 @@ public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type
   let item_id = object::new(ctx);
   event::emit(ItemCreated { id: item_id.to_inner() });
 
-  let img_url_cfg = dynamic_field::borrow<ConfigKey<ItemType>, Config>(&collection.id, ConfigKey<ItemType>{`type`: item_type, name: b"img_url".to_string()});
+  let img_url_cfg = dynamic_field::borrow<TypeConfigKey<ItemType>, TypeConfig>(&collection.id, TypeConfigKey<ItemType>{`type`: item_type, name: b"img_url".to_string()});
 
   Item {
     id: item_id,
@@ -422,7 +422,7 @@ public fun add_config_to_type<Type: store + copy + drop>(collection: &mut Collec
   assert!(collection_id == cap.collection_id, ENotOwner);
 
   assert!(dynamic_field::exists_(&collection.id, TypeKey<Type>{`type`}), ENotExistType);
-  dynamic_field::add(&mut collection.id, ConfigKey<Type>{`type`, name}, Config{name, content});
+  dynamic_field::add(&mut collection.id, TypeConfigKey<Type>{`type`, name}, TypeConfig{name, content});
 }
 
 public fun update_config_to_type<Type: store + copy + drop>(collection: &mut Collection, cap: &CollectionCap, `type`: String, name: String, content: String) {
@@ -430,7 +430,7 @@ public fun update_config_to_type<Type: store + copy + drop>(collection: &mut Col
   assert!(collection_id == cap.collection_id, ENotOwner);
 
   assert!(dynamic_field::exists_(&collection.id, TypeKey<Type>{`type`}), ENotExistType);
-  let config = dynamic_field::borrow_mut<ConfigKey<Type>, Config>(&mut collection.id, ConfigKey<Type>{`type`, name});
+  let config = dynamic_field::borrow_mut<TypeConfigKey<Type>, TypeConfig>(&mut collection.id, TypeConfigKey<Type>{`type`, name});
   config.content = content;
 }
 
