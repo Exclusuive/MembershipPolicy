@@ -157,15 +157,16 @@ public struct Item has key, store{
   img_url: String
 }
 
+public struct AttributeScroll has key, store {
+  id: UID,
+  attribute: Attribute
+}
+
 public struct Attribute has store {
   `type`: AttributeType, 
   value: u64
 }
 
-public struct AttributeScroll has key, store {
-  id: UID,
-  attribute: Attribute
-}
 
 public struct Ticket has key, store {
   id: UID,
@@ -252,6 +253,20 @@ public fun mint_item(collection: &mut Collection, cap: &CollectionCap, layer_typ
   let item = new_item(collection, cap, layer_type, item_type, ctx);
   transfer::transfer(item, recipient)
 }
+
+// off-chain Mission 에 필요한 Backend에서 사용 할 mint ticket
+public fun mint_ticket(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, recipient: address, ctx: &mut TxContext) { 
+  // let collection_id = object::id(collection);
+  // assert!(collection_id == cap.collection_id, ENotOwner);
+  // assert!(collection.layer_types.contains(&LayerType{collection_id, `type`: layer_type}), ENotExistType);
+
+  // // let img_url = dynamic_field::borrow<TypeConfigKey<ItemType>, TypeConfig>(&mut collection.id, TypeConfigKey<ItemType>{`type`: item_type, name: b"img_url".to_string()});
+
+  // let item = new_item(collection, cap, layer_type, item_type, ctx);
+  // transfer::transfer(item, recipient)
+}
+
+
 
 // =======================================================
 // ======================== Admin Public Functions : New Object Functions
@@ -535,6 +550,10 @@ public fun attach_attribute_to_item(collection: &Collection, item: &mut Item, at
   id.delete();
   dynamic_field::add(&mut item.id, TypeKey<AttributeType>{`type`: attribute.`type`.`type`}, attribute)
 }
+
+// =======================================================
+// ======================== User Public Functions: Ticket Functions
+// =======================================================
 
 // Ticket 오브젝트 되면서 없애도 되나?
 public fun store_ticket_to_ticket_bag(
