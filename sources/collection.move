@@ -219,7 +219,7 @@ entry fun create_market(collection: &Collection, cap: &CollectionCap, name: Stri
   transfer::transfer(market_cap, ctx.sender());
 }
 
-entry fun mint_and_tranfer_chracter(collection: &Collection, cap: &CollectionCap, img_url: String, recipient: address, ctx: &mut TxContext) {
+entry fun mint_character(collection: &Collection, cap: &CollectionCap, img_url: String, recipient: address, ctx: &mut TxContext) {
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
   let chracter = new_chracter(collection, cap, img_url, ctx);
