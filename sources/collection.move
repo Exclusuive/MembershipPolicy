@@ -58,12 +58,12 @@ public struct MarketCap has key, store {
 
 public struct Listing has store {
   number: u64,
-  conditions: vector<Condition>,
+  conditions: vector<PurchaseCondition>,
   price: u64,
   product: TypeName
 }
 
-public struct Condition has store, copy, drop {
+public struct PurchaseCondition has store, copy, drop {
   ticket_type: TicketType,
   requirement: u64,
 }
@@ -337,7 +337,7 @@ public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type
   let item_id = object::new(ctx);
   event::emit(ItemCreated { id: item_id.to_inner() });
 
-  let img_url_cfg = dynamic_field::borrow<ConfigKey<ItemType>, Config>(&mut collection.id, ConfigKey<ItemType>{`type`: item_type, name: b"img_url".to_string()});
+  let img_url_cfg = dynamic_field::borrow<ConfigKey<ItemType>, Config>(&collection.id, ConfigKey<ItemType>{`type`: item_type, name: b"img_url".to_string()});
 
   Item {
     id: item_id,
@@ -452,7 +452,7 @@ public fun add_listing_to_market<Product: key + store>(
 
   let listing = Listing{
     number: market.listings.length(),
-    conditions: vector<Condition>[],
+    conditions: vector<PurchaseCondition>[],
     price,
     product: type_name::get<Product>()
   };
@@ -517,7 +517,7 @@ public fun add_condition_to_listing(
   ) {
     let listing = borrow_mut_listing(collection, market, cap, listing_number);
 
-    listing.conditions.push_back(Condition{
+    listing.conditions.push_back(PurchaseCondition{
       ticket_type: TicketType{collection_id: object::id(collection), `type`: ticket_type},
       requirement
     })
