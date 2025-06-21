@@ -21,21 +21,11 @@ public struct DokpamiItem<phantom T> has key, store {
   id: UID,
 }
 
-// public struct LayerField<LayerType: drop> has store {
-//   layer: LayerType
-// }
-
 // Layer
 public struct BackgroundLayer has store, drop {}
-public struct BackgroundLayer2 has store, drop {}
-
-
-public struct CharacterLayer has drop {}
-
-// Property
-public struct StrProperty has drop {}
-
-public struct IntProperty has drop {}
+public struct HeadLayer has store, drop {}
+public struct BodyLayer has store, drop {}
+public struct FootLayer has store, drop {}
 
 // Item
 public struct FireBackground has key, store {
@@ -56,7 +46,11 @@ public struct Character2 has key, store {
   id: UID
 }
 
+// Property
+public struct StrProperty has drop {}
+public struct IntProperty has drop {}
 
+// Configs
 public struct LayerConfig has store, drop {
   description: String,
   // sub_descir: String,
