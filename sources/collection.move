@@ -170,7 +170,7 @@ public struct TypeKey<phantom Type: store + copy + drop> has store, copy, drop {
 }
 
 public struct ItemBagKey has store, copy, drop {
-  `type`: String
+  layer_type: String
 }
 
 public struct TicketBagKey has store, copy, drop {
@@ -246,8 +246,8 @@ public fun equip_item_to_chracter(collection: &Collection, chracter: &mut Charac
     dynamic_field::add(&mut chracter.id, TypeKey<LayerType>{`type`: layer_type.`type`}, ItemSocket{`type`: layer_type, socket: option::none<Item>()});
   };
 
-  if (!dynamic_field::exists_<ItemBagKey>(&chracter.id, ItemBagKey{`type`: layer_type.`type`})){
-    dynamic_field::add(&mut chracter.id, ItemBagKey{`type`: layer_type.`type`}, vector<Item>[]);
+  if (!dynamic_field::exists_<ItemBagKey>(&chracter.id, ItemBagKey{layer_type: layer_type.`type`})){
+    dynamic_field::add(&mut chracter.id, ItemBagKey{layer_type: layer_type.`type`}, vector<Item>[]);
   };
 
   let layer = dynamic_field::borrow_mut<TypeKey<LayerType>, ItemSocket>(&mut chracter.id, TypeKey<LayerType>{`type`: layer_type.`type`});
@@ -258,12 +258,12 @@ public fun equip_item_to_chracter(collection: &Collection, chracter: &mut Charac
   }; 
   
   let old_item = layer.socket.swap(item);
-  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut chracter.id, ItemBagKey{`type`: layer_type.`type`})
+  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut chracter.id, ItemBagKey{layer_type: layer_type.`type`})
   .push_back(old_item);
 }
 
 public fun pop_item_from_bag(chracter: &mut Character, `type`: String): Item{
-  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut chracter.id, ItemBagKey{`type`})
+  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut chracter.id, ItemBagKey{layer_type: `type`})
   .pop_back()
 }
 
