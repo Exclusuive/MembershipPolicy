@@ -33,7 +33,7 @@ public struct COLLECTION has drop {}
 
 public struct Collection has key, store {
   id: UID,
-  character_type: CharacterType,
+  membership_type: MembershipType,
   layer_types: VecSet<LayerType>,
   item_types: VecSet<ItemType>,
   attribute_types: VecSet<AttributeType>,
@@ -90,7 +90,7 @@ public struct MarketCreated has copy, drop {
   id: ID
 }
 
-public struct CharacterCreated has copy, drop {
+public struct MembershipCreated has copy, drop {
   id: ID
 }
 
@@ -105,7 +105,7 @@ public struct TicketCreated has copy, drop {
 // =======================================================
 // ======================== Types : Collection Metadata
 // =======================================================
-public struct CharacterType has store, copy, drop {
+public struct MembershipType has store, copy, drop {
   collection_id: ID,
   `type`: String, 
 }
@@ -139,9 +139,9 @@ public struct TypeConfig has store, copy, drop {
 // =======================================================
 // ======================== Objects
 // =======================================================
-public struct Character has key, store {
+public struct Membership has key, store {
   id: UID,
-  `type`: CharacterType,
+  `type`: MembershipType,
   img_url: String,
 }
 
@@ -166,7 +166,6 @@ public struct Attribute has store {
   `type`: AttributeType, 
   value: u64
 }
-
 
 public struct Ticket has key, store {
   id: UID,
@@ -202,11 +201,11 @@ public struct TypeConfigKey<phantom Type: store + copy + drop> has store, copy, 
 fun init(otw: COLLECTION, ctx: &mut TxContext) {
   let publisher = package::claim(otw, ctx);
 
-  let mut display = display::new<Character>(&publisher, ctx);
+  let mut display = display::new<Membership>(&publisher, ctx);
   display.add(b"id".to_string(), b"{id}".to_string());
   display.add(b"name".to_string(), b"{type.name}".to_string());
   display.add(b"collection".to_string(), b"{type.collection_id}".to_string());
-  // display.add(b"description".to_string(), b"{character.description}".to_string());
+  // display.add(b"description".to_string(), b"{membership.description}".to_string());
   display.add(b"img_url".to_string(), b"{img_url}".to_string());
   display.update_version();
 
@@ -236,11 +235,11 @@ entry fun create_market(collection: &Collection, cap: &CollectionCap, name: Stri
 // =======================================================
 // ======================== Admin Public Functions : Mint Functions
 // =======================================================
-public fun mint_character(collection: &Collection, cap: &CollectionCap, img_url: String, recipient: address, ctx: &mut TxContext) {
+public fun mint_membership(collection: &Collection, cap: &CollectionCap, img_url: String, recipient: address, ctx: &mut TxContext) {
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
-  let character = new_character(collection, cap, img_url, ctx);
-  transfer::transfer(character, recipient);
+  let membership = new_membership(collection, cap, img_url, ctx);
+  transfer::transfer(membership, recipient);
 }
 
 public fun mint_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, recipient: address, ctx: &mut TxContext) { 
@@ -278,7 +277,7 @@ public fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   let mut collection = 
     Collection { 
       id, 
-      character_type: CharacterType{collection_id, `type`: name},
+      membership_type: MembershipType{collection_id, `type`: name},
       layer_types: vec_set::empty<LayerType>(),
       attribute_types: vec_set::empty<AttributeType>(),
       ticket_types: vec_set::empty<TicketType>(),
@@ -287,7 +286,7 @@ public fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
       version: 0
     };
 
-  dynamic_field::add(&mut collection.id, TypeKey<CharacterType> {`type`: name}, CharacterType{collection_id, `type`: name});
+  dynamic_field::add(&mut collection.id, TypeKey<MembershipType> {`type`: name}, MembershipType{collection_id, `type`: name});
 
   (
     collection,
@@ -313,15 +312,15 @@ public fun new_market(collection: &Collection, cap: &CollectionCap, name: String
   )
 }
 
-public fun new_character(collection: &Collection, cap: &CollectionCap, img_url: String, ctx: &mut TxContext): Character { 
+public fun new_membership(collection: &Collection, cap: &CollectionCap, img_url: String, ctx: &mut TxContext): Membership { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
-  let character = Character {
+  let membership = Membership {
     id: object::new(ctx),
-    `type`: collection.character_type,
+    `type`: collection.membership_type,
     img_url
   };
 
-  character
+  membership
 }
 
 // public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, ctx: &mut TxContext): Item { 
@@ -510,19 +509,19 @@ public fun stock_product_to_listing<Product: key + store>(
 // ======================== User Public Functions: Item Functions
 // =======================================================
 
-public fun equip_item_to_character(collection: &Collection, character: &mut Character, item: Item){
-  assert!(object::id(collection) == character.`type`.collection_id, EInvalidCollection);
+public fun equip_item_to_membership(collection: &Collection, membership: &mut Membership, item: Item){
+  assert!(object::id(collection) == membership.`type`.collection_id, EInvalidCollection);
 
   let layer_type = item.`type`;
-  if (!dynamic_field::exists_<TypeKey<LayerType>>(&character.id, TypeKey<LayerType>{`type`: layer_type.`type`})){
-    dynamic_field::add(&mut character.id, TypeKey<LayerType>{`type`: layer_type.`type`}, ItemSocket{`type`: layer_type, socket: option::none<Item>()});
+  if (!dynamic_field::exists_<TypeKey<LayerType>>(&membership.id, TypeKey<LayerType>{`type`: layer_type.`type`})){
+    dynamic_field::add(&mut membership.id, TypeKey<LayerType>{`type`: layer_type.`type`}, ItemSocket{`type`: layer_type, socket: option::none<Item>()});
   };
 
-  if (!dynamic_field::exists_<ItemBagKey>(&character.id, ItemBagKey{layer_type: layer_type.`type`})){
-    dynamic_field::add(&mut character.id, ItemBagKey{layer_type: layer_type.`type`}, vector<Item>[]);
+  if (!dynamic_field::exists_<ItemBagKey>(&membership.id, ItemBagKey{layer_type: layer_type.`type`})){
+    dynamic_field::add(&mut membership.id, ItemBagKey{layer_type: layer_type.`type`}, vector<Item>[]);
   };
 
-  let layer = dynamic_field::borrow_mut<TypeKey<LayerType>, ItemSocket>(&mut character.id, TypeKey<LayerType>{`type`: layer_type.`type`});
+  let layer = dynamic_field::borrow_mut<TypeKey<LayerType>, ItemSocket>(&mut membership.id, TypeKey<LayerType>{`type`: layer_type.`type`});
 
   if (layer.socket.is_none()) {
     layer.socket.fill(item);
@@ -530,16 +529,16 @@ public fun equip_item_to_character(collection: &Collection, character: &mut Char
   }; 
   
   let old_item = layer.socket.swap(item);
-  store_item_to_item_bag(character, layer_type.`type`, old_item);
+  store_item_to_item_bag(membership, layer_type.`type`, old_item);
 }
 
-public fun store_item_to_item_bag(character: &mut Character, layer_type: String, item: Item){
-  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut character.id, ItemBagKey{layer_type})
+public fun store_item_to_item_bag(membership: &mut Membership, layer_type: String, item: Item){
+  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut membership.id, ItemBagKey{layer_type})
   .push_back(item);
 }
 
-public fun retrieve_item_from_item_bag(character: &mut Character, `type`: String): Item{
-  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut character.id, ItemBagKey{layer_type: `type`})
+public fun retrieve_item_from_item_bag(membership: &mut Membership, `type`: String): Item{
+  dynamic_field::borrow_mut<ItemBagKey, vector<Item>>(&mut membership.id, ItemBagKey{layer_type: `type`})
   .pop_back()
 }
 
@@ -558,22 +557,22 @@ public fun attach_attribute_to_item(collection: &Collection, item: &mut Item, at
 // Ticket 오브젝트 되면서 없애도 되나?
 public fun store_ticket_to_ticket_bag(
     collection: &Collection,
-    character: &mut Character,
+    membership: &mut Membership,
     ticket: Ticket,
 ) {
     assert!(object::id(collection) == ticket.`type`.collection_id, EInvalidCollection);
 
-    if (!dynamic_field::exists_(&character.id, TicketBagKey{ticket_type: ticket.`type`.`type`})){
-      dynamic_field::add<TicketBagKey, vector<Ticket>>(&mut character.id, TicketBagKey{ticket_type: ticket.`type`.`type`}, vector<Ticket>[]);
+    if (!dynamic_field::exists_(&membership.id, TicketBagKey{ticket_type: ticket.`type`.`type`})){
+      dynamic_field::add<TicketBagKey, vector<Ticket>>(&mut membership.id, TicketBagKey{ticket_type: ticket.`type`.`type`}, vector<Ticket>[]);
     };
 
-    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut character.id, TicketBagKey{ticket_type: ticket.`type`.`type`});
+    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut membership.id, TicketBagKey{ticket_type: ticket.`type`.`type`});
     ticket_bag.push_back(ticket);
 }
 
 // Ticket 오브젝트 되면서 없애도 되나?
-public fun retrieve_ticket_from_ticket_bag(character: &mut Character, `type`: String): Ticket {
-    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut character.id, TicketBagKey{ticket_type: `type`});
+public fun retrieve_ticket_from_ticket_bag(membership: &mut Membership, `type`: String): Ticket {
+    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut membership.id, TicketBagKey{ticket_type: `type`});
     ticket_bag.pop_back()
 }
 
