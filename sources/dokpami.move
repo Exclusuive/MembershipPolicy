@@ -3,88 +3,116 @@ module exclusuive::dokpami;
 use std::string::{String};
 use sui::package;
 
-use exclusuive::membership_policy::{Self,Membership, MembershipPolicy, MembershipPolicyCap};
+use exclusuive::membership_policy::{Self, Membership, MembershipPolicy, MembershipPolicyCap};
 
 public struct DOKPAMI has drop {}
 
-////////// -----------
-public struct OldNFT has key, store {
-  id: UID,
-}
-
-/////////// -----------
+// NFT Object
 public struct Dokpami has key, store {
   id: UID,
 }
 
-public struct DokpamiItem<phantom T> has key, store {
+public struct Dokpami2 has key, store {
   id: UID,
 }
 
+// public struct DokpamiItem<phantom T> has key, store {
+//   id: UID,
+// }
+
 // Layer
-public struct BackgroundLayer has store, drop {}
-public struct HeadLayer has store, drop {}
-public struct BodyLayer has store, drop {}
-public struct FootLayer has store, drop {}
+public struct BackgroundLayer has drop {}
+public struct HeadLayer has drop {}
+public struct BodyLayer has drop {}
+public struct FootLayer has drop {}
 
-// Item
-public struct FireBackground has key, store {
-  id: UID
-}
-public struct SnowBackground has key, store {
-  id: UID
-}
-public struct RainBackground has key, store {
-  id: UID
-}
+// // Item
+// public struct FireBackground has key, store {
+//   id: UID
+// }
+// public struct SnowBackground has key, store {
+//   id: UID
+// }
+// public struct RainBackground has key, store {
+//   id: UID
+// }
 
-public struct Character1 has key, store {
-  id: UID
-}
+// Attribute
+public struct Strong has drop {}
+public struct Intelligence has drop {}
+public struct HealthPoint has drop {}
 
-public struct Character2 has key, store {
-  id: UID
-}
-
-// Property
-public struct StrProperty has drop {}
-public struct IntProperty has drop {}
+// Ticket
+public struct BasicTicket has drop {}
+public struct FireTicket has drop {}
+public struct IceTicket has drop {}
 
 // Configs
-public struct LayerConfig has store, drop {
+public struct LayerConfig has store, copy, drop {
   description: String,
-  // sub_descir: String,
 }
 
-public struct ItemConfig has store, drop {
+public struct ItemConfig has store, copy, drop {
   description: String,
-  sub_descir: String,
 }
 
-public struct PropertyConfig has store, drop {
+public struct AttributeConfig has store, copy, drop {
   description: String,
-  sub_descir: String,
+}
+
+public struct TicketConfig has store, copy, drop {
+  description: String,
 }
 
 #[allow(lint(share_owned))]
 fun init(otw: DOKPAMI, ctx: &mut TxContext) {
   let pub = package::claim(otw, ctx);
 
-  let (mempol, cap) = membership_policy::new<Dokpami>(&pub, ctx);
+  let (mut policy, cap) = membership_policy::new<Dokpami>(&pub, ctx);
 
-  transfer::public_share_object(mempol);
+  membership_policy::register_layer_type(BackgroundLayer{},&mut policy, &cap, LayerConfig{description: b"background layer description".to_string()});
+  membership_policy::register_layer_type(HeadLayer{},&mut policy, &cap, LayerConfig{description: b"head layer description".to_string()});
+  membership_policy::register_layer_type(BodyLayer{},&mut policy, &cap, LayerConfig{description: b"body layer description".to_string()});
+  membership_policy::register_layer_type(FootLayer{},&mut policy, &cap, LayerConfig{description: b"foot layer description".to_string()});
+
+  membership_policy::register_item_type(BackgroundLayer{}, &mut policy, &cap, b"NormalBackground".to_string(), ItemConfig{description: b"item description".to_string()});
+  membership_policy::register_item_type(BackgroundLayer{}, &mut policy, &cap, b"FireBackground".to_string(), ItemConfig{description: b"item description".to_string()});
+  membership_policy::register_item_type(BackgroundLayer{}, &mut policy, &cap, b"IceBackground".to_string(), ItemConfig{description: b"item description".to_string()});
+  membership_policy::register_item_type(HeadLayer{}, &mut policy, &cap, b"BlueCap".to_string(), ItemConfig{description: b"item description".to_string()});
+  membership_policy::register_item_type(HeadLayer{}, &mut policy, &cap, b"RedCap".to_string(), ItemConfig{description: b"item description".to_string()});
+  membership_policy::register_item_type(BodyLayer{}, &mut policy, &cap, b"NormalBody".to_string(), ItemConfig{description: b"item description".to_string()});
+  membership_policy::register_item_type(BodyLayer{}, &mut policy, &cap, b"BlackShirtBody".to_string(), ItemConfig{description: b"item description".to_string()});
+  membership_policy::register_item_type(BodyLayer{}, &mut policy, &cap, b"WhiteShirtBody".to_string(), ItemConfig{description: b"item description".to_string()});
+  membership_policy::register_item_type(FootLayer{}, &mut policy, &cap, b"BlackShoes".to_string(), ItemConfig{description: b"item description".to_string()});
+  membership_policy::register_item_type(FootLayer{}, &mut policy, &cap, b"WhiteShoes".to_string(), ItemConfig{description: b"item description".to_string()});
+
+  membership_policy::register_attribute_type(Strong{}, &mut policy, &cap, AttributeConfig{description: b"Strong is ...".to_string()});
+  membership_policy::register_attribute_type(Intelligence{}, &mut policy, &cap, AttributeConfig{description: b"Intelligence is ...".to_string()});
+  membership_policy::register_attribute_type(HealthPoint{}, &mut policy, &cap, AttributeConfig{description: b"HealthPoint is ...".to_string()});
+
+  membership_policy::register_ticket_type(BasicTicket{}, &mut policy, &cap, AttributeConfig{description: b"BasicTicket is ...".to_string()});
+  membership_policy::register_ticket_type(FireTicket{}, &mut policy, &cap, AttributeConfig{description: b"FireTicket is ...".to_string()});
+  membership_policy::register_ticket_type(IceTicket{}, &mut policy, &cap, AttributeConfig{description: b"IceTicket is ...".to_string()});
+
+  transfer::public_share_object(policy);
 
   transfer::public_transfer(cap, ctx.sender());
   transfer::public_transfer(pub, ctx.sender());
 }
 
 #[allow(lint(self_transfer))]
-public fun default(ctx: &mut TxContext) {
-  transfer::transfer(Dokpami{id: object::new(ctx)}, ctx.sender());
+entry fun mint_dokpami(ctx: &mut TxContext) {
+  let dokpami = new_dokpami(ctx);
+  transfer::transfer(dokpami, ctx.sender());
 }
 
-public fun new(ctx: &mut TxContext): Dokpami {
+public fun new_dokpami(ctx: &mut TxContext): Dokpami {
   Dokpami{id: object::new(ctx)}
+}
+
+public fun attach_membership(policy: &MembershipPolicy<Dokpami>, dokpami: &mut Dokpami, ctx: &mut TxContext) {
+  membership_policy::attach_membership(&mut dokpami.id, policy, ctx);
+
 }
 
 public fun borrow_membership(base: &Dokpami, policy: &MembershipPolicy<Dokpami>): &Membership<Dokpami> {

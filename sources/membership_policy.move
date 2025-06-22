@@ -125,14 +125,16 @@ public struct Ticket<phantom TicketType: drop> has key, store {
 public struct MembershipKey has store, copy, drop{}
 
 // Membership
-public struct LayerKey<phantom LayerType: drop> has store, copy, drop{}
+public struct RegisterTypeKey<phantom Type: drop> has store, copy, drop{}
+
+// public struct LayerKey<phantom LayerType: drop> has store, copy, drop{}
 
 public struct ItemKey<phantom LayerType: drop> has store, copy, drop {
   item_type: String
 }
-public struct AttributeKey<phantom AttributeType: drop> has store, drop, copy {} 
+// public struct AttributeKey<phantom AttributeType: drop> has store, drop, copy {} 
 
-public struct TicketKey<phantom TicketType: drop> has store, drop, copy {} 
+// public struct TicketKey<phantom TicketType: drop> has store, drop, copy {} 
 
 // Bag
 public struct ItemBagKey<phantom LayerType: drop> has store, copy, drop{} 
@@ -278,14 +280,14 @@ public fun equip_item_to_membership<T: key, LayerType: drop>(
       dynamic_field::add(&mut membership.id, ItemBagKey<LayerType>{}, vector<Item<LayerType>>[]);
     };
 
-    if (!dynamic_field::exists_(&membership.id, LayerKey<LayerType>{})){
+    if (!dynamic_field::exists_(&membership.id, RegisterTypeKey<LayerType>{})){
       let item_socket = ItemSocket<LayerType>{
         socket: option::none(), 
       };
-      dynamic_field::add(&mut membership.id, LayerKey<LayerType>{}, item_socket);
+      dynamic_field::add(&mut membership.id, RegisterTypeKey<LayerType>{}, item_socket);
     };
 
-    let mut item_socket = dynamic_field::remove<LayerKey<LayerType>, ItemSocket<LayerType>>(&mut membership.id, LayerKey<LayerType>{});
+    let mut item_socket = dynamic_field::remove<RegisterTypeKey<LayerType>, ItemSocket<LayerType>>(&mut membership.id, RegisterTypeKey<LayerType>{});
 
     if (item_socket.socket.is_some()) {
       let old_item = item_socket.socket.extract();
@@ -293,7 +295,7 @@ public fun equip_item_to_membership<T: key, LayerType: drop>(
     };
 
     item_socket.socket.fill(item);
-    dynamic_field::add(&mut membership.id, LayerKey<LayerType>{}, item_socket);
+    dynamic_field::add(&mut membership.id, RegisterTypeKey<LayerType>{}, item_socket);
 }
 
 public fun store_item_to_item_bag<T: key, LayerType: drop>(
@@ -317,7 +319,7 @@ public fun attatch_attribute_to_item<LayerType: drop, AttributeType: drop>(
 ) {
     let AttributeScroll {id, attribute} = attribute_scroll;
     id.delete();
-    dynamic_field::add(&mut item.id, AttributeKey<AttributeType>{}, attribute);
+    dynamic_field::add(&mut item.id, RegisterTypeKey<AttributeType>{}, attribute);
 }
 
 
@@ -357,7 +359,7 @@ public fun register_layer_type<T: key, LayerType: drop, Config: store + copy + d
 
     let layer_type = type_name::get<LayerType>();
     policy.layer_types.insert(layer_type);
-    dynamic_field::add(&mut policy.id, LayerKey<LayerType> {}, cfg);
+    dynamic_field::add(&mut policy.id, RegisterTypeKey<LayerType> {}, cfg);
     policy.update_version_policy();
 }
 
@@ -384,7 +386,7 @@ public fun register_attribute_type<T: key, AttributeType: drop, Config: store + 
     assert!(object::id(policy) == cap.policy_id, ENotOwner);
     assert!(!has_attribute<T, AttributeType>(policy), ERuleAlreadySet);
 
-    dynamic_field::add(&mut policy.id, AttributeKey<AttributeType> {}, cfg);
+    dynamic_field::add(&mut policy.id, RegisterTypeKey<AttributeType> {}, cfg);
     policy.update_version_policy();
 }
 
@@ -397,7 +399,7 @@ public fun register_ticket_type<T: key, TicketType: drop, Config: store + copy +
     assert!(object::id(policy) == cap.policy_id, ENotOwner);
     assert!(!has_ticket<T, TicketType>(policy), ERuleAlreadySet);
 
-    dynamic_field::add(&mut policy.id, TicketKey<TicketType> {}, cfg);
+    dynamic_field::add(&mut policy.id, RegisterTypeKey<TicketType> {}, cfg);
     policy.update_version_policy();
 }
 
@@ -425,7 +427,7 @@ public fun register_purchase_condition_to_listing<TicketType: drop>(listing: &mu
   })
 } 
 
-public fun stock_product_to_market<T: key, Product: store>(market: &mut Market<T>, cap: &MarketCap<T>, listing_number: u64, product: Product) {
+public fun stock_product_to_listing<T: key, Product: store>(market: &mut Market<T>, cap: &MarketCap<T>, listing_number: u64, product: Product) {
   assert!(object::id(market) == cap.market_id, ENotOwner);
   market.listings.borrow(listing_number);
 
@@ -433,7 +435,7 @@ public fun stock_product_to_market<T: key, Product: store>(market: &mut Market<T
   .push_back(product);
 }
 
-public fun borrow_listing<T: key>(market: &mut Market<T>, cap: &MarketCap<T>, index: u64): &Listing {
+public fun borrow_listing<T: key>(market: &Market<T>, cap: &MarketCap<T>, index: u64): &Listing {
   assert!(object::id(market) == cap.market_id, ENotOwner);
   market.listings.borrow(index)
 }
@@ -505,13 +507,13 @@ public fun confirm_purchase_request<T: key, Product: store>(
 
 // ===================================== Public Functions
 public fun has_layer<T: key, LayerType: drop>(policy: &MembershipPolicy<T>): bool {
-  dynamic_field::exists_(&policy.id, LayerKey<LayerType> {})
+  dynamic_field::exists_(&policy.id, RegisterTypeKey<LayerType> {})
 }
 public fun has_attribute<T: key, AttributeType: drop>(policy: &MembershipPolicy<T>): bool {
-  dynamic_field::exists_(&policy.id, AttributeKey<AttributeType> {})
+  dynamic_field::exists_(&policy.id, RegisterTypeKey<AttributeType> {})
 }
 public fun has_ticket<T: key, TicketType: drop>(policy: &MembershipPolicy<T>): bool {
-  dynamic_field::exists_(&policy.id, TicketKey<TicketType> {})
+  dynamic_field::exists_(&policy.id, RegisterTypeKey<TicketType> {})
 }
 
 public fun update_version_policy<T: key>(policy: &mut MembershipPolicy<T>) {
