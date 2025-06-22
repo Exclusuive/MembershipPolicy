@@ -519,6 +519,11 @@ public fun has_ticket<T: key, TicketType: drop>(policy: &MembershipPolicy<T>): b
 public fun update_version_policy<T: key>(policy: &mut MembershipPolicy<T>) {
   policy.version = policy.version + 1;
 }
+
+public fun policy_id<T: key>(cap: &MembershipPolicyCap<T>): ID {
+  cap.policy_id
+}
+
 public (package) fun get_struct_name(self: TypeName): String {
     let ascii_colon: u8 = 58;
     let ascii_less_than: u8 = 60;

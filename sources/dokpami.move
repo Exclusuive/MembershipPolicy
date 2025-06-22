@@ -110,10 +110,15 @@ public fun new_dokpami(ctx: &mut TxContext): Dokpami {
   Dokpami{id: object::new(ctx)}
 }
 
-public fun attach_membership(policy: &MembershipPolicy<Dokpami>, dokpami: &mut Dokpami, ctx: &mut TxContext) {
-  membership_policy::attach_membership(&mut dokpami.id, policy, ctx);
-
+public fun mint_dokpami_with_membership(policy: &MembershipPolicy<Dokpami>, cap: &MembershipPolicyCap<Dokpami>, recipient: address, ctx: &mut TxContext) {
+  assert!(object::id(policy) == cap.policy_id(), 1);
+  let dokpami = new_dokpami(ctx);
+  transfer::transfer(dokpami, recipient);
 }
+
+// public fun attach_membership(policy: &MembershipPolicy<Dokpami>, dokpami: &mut Dokpami, ctx: &mut TxContext) {
+//   membership_policy::attach_membership(&mut dokpami.id, policy, ctx);
+// }
 
 public fun borrow_membership(base: &Dokpami, policy: &MembershipPolicy<Dokpami>): &Membership<Dokpami> {
   membership_policy::borrow_membership(&base.id, policy)
