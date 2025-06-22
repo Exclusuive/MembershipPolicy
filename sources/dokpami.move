@@ -16,10 +16,6 @@ public struct Dokpami2 has key, store {
   id: UID,
 }
 
-// public struct DokpamiItem<phantom T> has key, store {
-//   id: UID,
-// }
-
 // Layer
 public struct BackgroundLayer has drop {}
 public struct HeadLayer has drop {}

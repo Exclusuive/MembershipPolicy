@@ -78,6 +78,10 @@ public struct MarketCreated<phantom T: key> has copy, drop {
   id: ID
 }
 
+public struct MembershipCreated<phantom T: key> has copy, drop {
+  id: ID
+}
+
 public struct ItemCreated<phantom T: key> has copy, drop {
   id: ID
 }
@@ -192,6 +196,17 @@ public fun new_market<T: key>(
     )
 }
 
+public fun new_membership<T: key, OTW: drop>(
+  _: OTW,
+  policy: &MembershipPolicy<T>,
+  ctx: &mut TxContext,
+): Membership<T> {
+    let membership = Membership<T>{id: object::new(ctx), policy_id: object::id(policy)};
+    event::emit(MembershipCreated<T> { id: object::id(&membership) });
+    membership
+}
+
+
 public fun new_item<T: key, LayerType: drop>(
   _: LayerType,
   item_type: String,
@@ -242,9 +257,9 @@ public fun new_ticket<T:key, TicketType: drop>(
 public fun attach_membership<T: key>(
     self: &mut UID,
     policy: &MembershipPolicy<T>,
-    ctx: &mut TxContext,
+    membership: Membership<T>,
 ){
-  let membership = Membership<T>{id: object::new(ctx), policy_id: object::id(policy)};
+  assert!(object::id(policy) == membership.policy_id, ENotCorrectMembershipPolicy);
   dynamic_field::add(self, MembershipKey{}, membership);
 }
 
@@ -271,6 +286,7 @@ public fun borrow_mut_membership<T: key>(
 // =======================================================
 public fun equip_item_to_membership<T: key, LayerType: drop>(
     membership: &mut Membership<T>,
+    // self: &mut UID,
     item: Item<LayerType>,
     policy: &MembershipPolicy<T>,
 ) {
