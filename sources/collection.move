@@ -279,7 +279,7 @@ public fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   let id = object::new(ctx);
   let collection_id = id.to_inner();
   event::emit(CollectionCreated { id: collection_id });
-  let collection = 
+  let mut collection = 
     Collection { 
       id, 
       membership_type: MembershipType{collection_id, type_name: name},
@@ -287,6 +287,7 @@ public fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
       balance: balance::zero(),
       version: 0
     };
+  dynamic_field::add(&mut collection.id, TypeKey<MembershipType> {type_name: name}, MembershipType{collection_id, type_name: name});
 
   (
     collection,
