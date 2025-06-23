@@ -107,33 +107,28 @@ public struct TicketCreated has copy, drop {
 // =======================================================
 public struct MembershipType has store, copy, drop {
   collection_id: ID,
-  `type`: String, 
+  type_name: String, 
 }
 
 public struct LayerType has store, copy, drop {
   collection_id: ID,
-  `type`: String, 
+  type_name: String, 
 }
 
 public struct ItemType has store, copy, drop {
   collection_id: ID,
-  `type`: LayerType, 
+  layer_type: LayerType, 
   item_type: String,
 }
 
 public struct AttributeType has store, copy, drop {
   collection_id: ID,
-  `type`: String,
+  type_name: String,
 }
 
 public struct TicketType has store, copy, drop {
   collection_id: ID,
-  `type`: String,
-}
-
-public struct TypeConfig has store, copy, drop {
-  name: String,
-  content: String
+  type_name: String,
 }
 
 // =======================================================
@@ -146,14 +141,13 @@ public struct Membership has key, store {
 }
 
 public struct ItemSocket has store {
-  `type`: LayerType, 
+  `type`: ItemType, 
   socket: Option<Item>
 }
 
 public struct Item has key, store{
   id: UID,
-  `type`: LayerType, 
-  item_type: String,
+  `type`: ItemType, 
   img_url: String
 }
 
@@ -176,7 +170,7 @@ public struct Ticket has key, store {
 // ======================== Keys
 // =======================================================
 public struct TypeKey<phantom Type: store + copy + drop> has store, copy, drop {
-  `type`: String
+  type_name: String
 }
 
 public struct ItemBagKey has store, copy, drop {
@@ -192,9 +186,14 @@ public struct ProductKey has store, copy, drop{
 }
 
 public struct TypeConfigKey<phantom Type: store + copy + drop> has store, copy, drop {
-  `type`: String,
+  type_name: String,
   name: String,
 }
+
+public struct TypeConfig has store, copy, drop {
+  content: String
+}
+
 
 // ==================================================
 
@@ -245,7 +244,7 @@ public fun mint_membership(collection: &Collection, cap: &CollectionCap, img_url
 public fun mint_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, recipient: address, ctx: &mut TxContext) { 
   let collection_id = object::id(collection);
   assert!(collection_id == cap.collection_id, ENotOwner);
-  assert!(collection.layer_types.contains(&LayerType{collection_id, `type`: layer_type}), ENotExistType);
+  assert!(collection.layer_types.contains(&LayerType{collection_id, type_name: layer_type}), ENotExistType);
 
   // let img_url = dynamic_field::borrow<TypeConfigKey<ItemType>, TypeConfig>(&mut collection.id, TypeConfigKey<ItemType>{`type`: item_type, name: b"img_url".to_string()});
 
@@ -277,7 +276,7 @@ public fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
   let mut collection = 
     Collection { 
       id, 
-      membership_type: MembershipType{collection_id, `type`: name},
+      membership_type: MembershipType{collection_id, type_name: name},
       layer_types: vec_set::empty<LayerType>(),
       attribute_types: vec_set::empty<AttributeType>(),
       ticket_types: vec_set::empty<TicketType>(),
@@ -286,7 +285,7 @@ public fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
       version: 0
     };
 
-  dynamic_field::add(&mut collection.id, TypeKey<MembershipType> {`type`: name}, MembershipType{collection_id, `type`: name});
+  dynamic_field::add(&mut collection.id, TypeKey<MembershipType> {type_name: name}, MembershipType{collection_id, type_name: name});
 
   (
     collection,
@@ -323,31 +322,35 @@ public fun new_membership(collection: &Collection, cap: &CollectionCap, img_url:
   membership
 }
 
-// public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String, ctx: &mut TxContext): Item { 
 public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, ctx: &mut TxContext): Item { 
   let collection_id = object::id(collection);
   assert!(collection_id == cap.collection_id, ENotOwner);
 
-  let layer_type = dynamic_field::borrow<TypeKey<LayerType>, LayerType>(&collection.id, TypeKey<LayerType>{`type`: layer_type});
-  assert!(collection.item_types.contains(&ItemType{collection_id, `type`: *layer_type, item_type}), 100);
+  let layer_type = dynamic_field::borrow<TypeKey<LayerType>, LayerType>(&collection.id, TypeKey<LayerType>{type_name: layer_type});
+  assert!(collection.item_types.contains(&ItemType{collection_id, layer_type: *layer_type, item_type}), 100);
 
   let item_id = object::new(ctx);
   event::emit(ItemCreated { id: item_id.to_inner() });
 
-  let img_url_cfg = dynamic_field::borrow<TypeConfigKey<ItemType>, TypeConfig>(&collection.id, TypeConfigKey<ItemType>{`type`: item_type, name: b"img_url".to_string()});
+  let img_url_cfg = dynamic_field::borrow<TypeConfigKey<ItemType>, TypeConfig>(&collection.id, TypeConfigKey<ItemType>{type_name: item_type, name: b"img_url".to_string()});
+
+  let item_type = ItemType {
+    collection_id,
+    layer_type: *layer_type,
+    item_type
+  };
 
   Item {
     id: item_id,
-    `type`: *layer_type,      
-    item_type,
+    `type`: item_type,
     img_url: img_url_cfg.content
   }
 }
 
-public fun new_attribute_scroll(collection: &Collection, cap: &CollectionCap, `type`: String, value: u64, ctx: &mut TxContext): AttributeScroll { 
+public fun new_attribute_scroll(collection: &Collection, cap: &CollectionCap, type_name: String, value: u64, ctx: &mut TxContext): AttributeScroll { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
-  let attribute_type = dynamic_field::borrow<TypeKey<AttributeType>, AttributeType>(&collection.id, TypeKey<AttributeType>{`type`});
+  let attribute_type = dynamic_field::borrow<TypeKey<AttributeType>, AttributeType>(&collection.id, TypeKey<AttributeType>{type_name});
   let attribute = Attribute {`type`: *attribute_type, value};
   AttributeScroll {
     id: object::new(ctx),
@@ -355,10 +358,10 @@ public fun new_attribute_scroll(collection: &Collection, cap: &CollectionCap, `t
   }
 }
 
-public fun new_ticket(collection: &Collection, cap: &CollectionCap, `type`: String, ctx: &mut TxContext): Ticket { 
+public fun new_ticket(collection: &Collection, cap: &CollectionCap, type_name: String, ctx: &mut TxContext): Ticket { 
   assert!(object::id(collection) == cap.collection_id, ENotOwner);
 
-  let ticket_type = dynamic_field::borrow<TypeKey<TicketType>, TicketType>(&collection.id, TypeKey<TicketType>{`type`});
+  let ticket_type = dynamic_field::borrow<TypeKey<TicketType>, TicketType>(&collection.id, TypeKey<TicketType>{type_name});
   Ticket {
     id: object::new(ctx),
     `type`: *ticket_type
@@ -369,53 +372,53 @@ public fun new_ticket(collection: &Collection, cap: &CollectionCap, `type`: Stri
 // ======================== Admin Public Functions : Register Type Functions
 // =======================================================
 
-public fun register_layer_type(collection: &mut Collection, cap: &CollectionCap, `type`: String) {
+public fun register_layer_type(collection: &mut Collection, cap: &CollectionCap, type_name: String) {
     let collection_id = object::id(collection);
     assert!(collection_id == cap.collection_id, ENotOwner);
 
-    collection.layer_types.insert(LayerType{collection_id, `type`});
-    dynamic_field::add(&mut collection.id, TypeKey<LayerType> {`type`}, LayerType{collection_id, `type`});
+    collection.layer_types.insert(LayerType{collection_id, type_name});
+    dynamic_field::add(&mut collection.id, TypeKey<LayerType> {type_name}, LayerType{collection_id, type_name});
     collection.update_version();
 }
 
 public fun register_item_type(collection: &mut Collection, cap: &CollectionCap, layer_type: String, item_type: String, img_url: String) {
     let collection_id = object::id(collection);
     assert!(collection_id == cap.collection_id, ENotOwner);
-    assert!(collection.layer_types.contains(&LayerType{collection_id, `type`: layer_type}), ENotExistType);
+    assert!(collection.layer_types.contains(&LayerType{collection_id, type_name: layer_type}), ENotExistType);
 
-    let layer_type = dynamic_field::borrow<TypeKey<LayerType>, LayerType>(&collection.id, TypeKey<LayerType>{`type`: layer_type});
-    collection.item_types.insert(ItemType{collection_id, `type`: *layer_type, item_type});
-        dynamic_field::add(&mut collection.id, TypeKey<ItemType> {`type`: item_type}, ItemType{collection_id, `type`: *layer_type, item_type});
+    let layer_type = dynamic_field::borrow<TypeKey<LayerType>, LayerType>(&collection.id, TypeKey<LayerType>{type_name: layer_type});
+    collection.item_types.insert(ItemType{collection_id, layer_type: *layer_type, item_type});
+        dynamic_field::add(&mut collection.id, TypeKey<ItemType> {type_name: item_type}, ItemType{collection_id, layer_type: *layer_type, item_type});
 
     register_config_to_type<ItemType>(collection, cap, item_type, b"img_url".to_string(), img_url);
 
     collection.update_version();
 }
 
-public fun register_attribute_type(collection: &mut Collection, cap: &CollectionCap, `type`: String) {
+public fun register_attribute_type(collection: &mut Collection, cap: &CollectionCap, type_name: String) {
     let collection_id = object::id(collection);
     assert!(collection_id == cap.collection_id, ENotOwner);
 
-    collection.attribute_types.insert(AttributeType{collection_id, `type`});
-    dynamic_field::add(&mut collection.id, TypeKey<AttributeType> {`type`}, AttributeType{collection_id, `type`});
+    collection.attribute_types.insert(AttributeType{collection_id, type_name});
+    dynamic_field::add(&mut collection.id, TypeKey<AttributeType> {type_name}, AttributeType{collection_id, type_name});
     collection.update_version();
 }
 
-public fun register_ticket_type(collection: &mut Collection, cap: &CollectionCap, `type`: String) {
+public fun register_ticket_type(collection: &mut Collection, cap: &CollectionCap,type_name: String) {
     let collection_id = object::id(collection);
     assert!(collection_id == cap.collection_id, ENotOwner);
 
-    collection.ticket_types.insert(TicketType{collection_id, `type`});
-    dynamic_field::add(&mut collection.id, TypeKey<TicketType> {`type`}, TicketType{collection_id, `type`});
+    collection.ticket_types.insert(TicketType{collection_id, type_name});
+    dynamic_field::add(&mut collection.id, TypeKey<TicketType> {type_name}, TicketType{collection_id, type_name});
     collection.update_version();
 }
 
-public fun register_config_to_type<Type: store + copy + drop>(collection: &mut Collection, cap: &CollectionCap, `type`: String, name: String, content: String) {
+public fun register_config_to_type<Type: store + copy + drop>(collection: &mut Collection, cap: &CollectionCap, type_name: String, name: String, content: String) {
   let collection_id = object::id(collection);
   assert!(collection_id == cap.collection_id, ENotOwner);
 
-  assert!(dynamic_field::exists_(&collection.id, TypeKey<Type>{`type`}), ENotExistType);
-  dynamic_field::add(&mut collection.id, TypeConfigKey<Type>{`type`, name}, TypeConfig{name, content});
+  assert!(dynamic_field::exists_(&collection.id, TypeKey<Type>{type_name}), ENotExistType);
+  dynamic_field::add(&mut collection.id, TypeConfigKey<Type>{type_name, name}, TypeConfig{content});
 }
 
 // =======================================================
@@ -436,12 +439,12 @@ public fun update_layer_order(collection: &mut Collection, cap: &CollectionCap, 
 }
 
 
-public fun update_config_to_type<Type: store + copy + drop>(collection: &mut Collection, cap: &CollectionCap, `type`: String, name: String, content: String) {
+public fun update_config_to_type<Type: store + copy + drop>(collection: &mut Collection, cap: &CollectionCap, type_name: String, name: String, content: String) {
   let collection_id = object::id(collection);
   assert!(collection_id == cap.collection_id, ENotOwner);
 
-  assert!(dynamic_field::exists_(&collection.id, TypeKey<Type>{`type`}), ENotExistType);
-  let config = dynamic_field::borrow_mut<TypeConfigKey<Type>, TypeConfig>(&mut collection.id, TypeConfigKey<Type>{`type`, name});
+  assert!(dynamic_field::exists_(&collection.id, TypeKey<Type>{type_name}), ENotExistType);
+  let config = dynamic_field::borrow_mut<TypeConfigKey<Type>, TypeConfig>(&mut collection.id, TypeConfigKey<Type>{type_name, name});
   config.content = content;
 }
 
@@ -482,7 +485,7 @@ public fun register_purchase_condition_to_listing(
     let listing = borrow_mut_listing(collection, market, cap, listing_number);
 
     listing.conditions.push_back(PurchaseCondition{
-      ticket_type: TicketType{collection_id: object::id(collection), `type`: ticket_type},
+      ticket_type: TicketType{collection_id: object::id(collection), type_name: ticket_type},
       requirement
     })
 } 
@@ -512,16 +515,16 @@ public fun stock_product_to_listing<Product: key + store>(
 public fun equip_item_to_membership(collection: &Collection, membership: &mut Membership, item: Item){
   assert!(object::id(collection) == membership.`type`.collection_id, EInvalidCollection);
 
-  let layer_type = item.`type`;
-  if (!dynamic_field::exists_<TypeKey<LayerType>>(&membership.id, TypeKey<LayerType>{`type`: layer_type.`type`})){
-    dynamic_field::add(&mut membership.id, TypeKey<LayerType>{`type`: layer_type.`type`}, ItemSocket{`type`: layer_type, socket: option::none<Item>()});
+  let item_type = item.`type`;
+  if (!dynamic_field::exists_<TypeKey<LayerType>>(&membership.id, TypeKey<LayerType>{type_name: item_type.layer_type.type_name})){
+    dynamic_field::add(&mut membership.id, TypeKey<LayerType>{type_name: item_type.layer_type.type_name}, ItemSocket{`type`: item_type, socket: option::none<Item>()});
   };
 
-  if (!dynamic_field::exists_<ItemBagKey>(&membership.id, ItemBagKey{layer_type: layer_type.`type`})){
-    dynamic_field::add(&mut membership.id, ItemBagKey{layer_type: layer_type.`type`}, vector<Item>[]);
+  if (!dynamic_field::exists_<ItemBagKey>(&membership.id, ItemBagKey{layer_type: item_type.layer_type.type_name})){
+    dynamic_field::add(&mut membership.id, ItemBagKey{layer_type: item_type.layer_type.type_name}, vector<Item>[]);
   };
 
-  let layer = dynamic_field::borrow_mut<TypeKey<LayerType>, ItemSocket>(&mut membership.id, TypeKey<LayerType>{`type`: layer_type.`type`});
+  let layer = dynamic_field::borrow_mut<TypeKey<LayerType>, ItemSocket>(&mut membership.id, TypeKey<LayerType>{type_name: item_type.layer_type.type_name});
 
   if (layer.socket.is_none()) {
     layer.socket.fill(item);
@@ -529,7 +532,7 @@ public fun equip_item_to_membership(collection: &Collection, membership: &mut Me
   }; 
   
   let old_item = layer.socket.swap(item);
-  store_item_to_item_bag(membership, layer_type.`type`, old_item);
+  store_item_to_item_bag(membership, item_type.layer_type.type_name, old_item);
 }
 
 public fun store_item_to_item_bag(membership: &mut Membership, layer_type: String, item: Item){
@@ -547,7 +550,7 @@ public fun attach_attribute_to_item(collection: &Collection, item: &mut Item, at
 
   let AttributeScroll {id, attribute} = attribute_scroll;
   id.delete();
-  dynamic_field::add(&mut item.id, TypeKey<AttributeType>{`type`: attribute.`type`.`type`}, attribute)
+  dynamic_field::add(&mut item.id, TypeKey<AttributeType>{type_name: attribute.`type`.type_name}, attribute)
 }
 
 // =======================================================
@@ -562,11 +565,11 @@ public fun store_ticket_to_ticket_bag(
 ) {
     assert!(object::id(collection) == ticket.`type`.collection_id, EInvalidCollection);
 
-    if (!dynamic_field::exists_(&membership.id, TicketBagKey{ticket_type: ticket.`type`.`type`})){
-      dynamic_field::add<TicketBagKey, vector<Ticket>>(&mut membership.id, TicketBagKey{ticket_type: ticket.`type`.`type`}, vector<Ticket>[]);
+    if (!dynamic_field::exists_(&membership.id, TicketBagKey{ticket_type: ticket.`type`.type_name})){
+      dynamic_field::add<TicketBagKey, vector<Ticket>>(&mut membership.id, TicketBagKey{ticket_type: ticket.`type`.type_name}, vector<Ticket>[]);
     };
 
-    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut membership.id, TicketBagKey{ticket_type: ticket.`type`.`type`});
+    let ticket_bag = dynamic_field::borrow_mut<TicketBagKey, vector<Ticket>>(&mut membership.id, TicketBagKey{ticket_type: ticket.`type`.type_name});
     ticket_bag.push_back(ticket);
 }
 
