@@ -35,9 +35,6 @@ public struct Collection has key, store {
   id: UID,
   membership_type: MembershipType,
   layer_order: VecSet<LayerType>,
-  // item_types: VecSet<ItemType>,
-  // attribute_types: VecSet<AttributeType>,
-  // ticket_types: VecSet<TicketType>,
   balance: Balance<SUI>,
   version: u64,
 }
@@ -87,18 +84,27 @@ public struct CollectionCreated has copy, drop {
 }
 
 public struct MarketCreated has copy, drop {
+  collection_id: ID,
   id: ID
 }
 
 public struct MembershipCreated has copy, drop {
+  collection_id: ID,
   id: ID
 }
 
 public struct ItemCreated has copy, drop {
+  collection_id: ID,
+  id: ID
+}
+
+public struct AttributeScrollCreated has copy, drop {
+  collection_id: ID,
   id: ID
 }
 
 public struct TicketCreated has copy, drop {
+  collection_id: ID,
   id: ID
 }
 
@@ -289,11 +295,12 @@ public fun new(name: String, ctx: &mut TxContext): (Collection, CollectionCap){
 }
 
 public fun new_market(collection: &Collection, cap: &CollectionCap, name: String, ctx: &mut TxContext): (Market, MarketCap){
-  assert!(object::id(collection) == cap.collection_id, ENotOwner);
+  let collection_id = object::id(collection);
+  assert!(collection_id == cap.collection_id, ENotOwner);
 
   let id = object::new(ctx);
   let market_id = id.to_inner();
-  event::emit(MarketCreated { id: market_id });
+  event::emit(MarketCreated { collection_id, id: market_id });
   (
     Market{
       id,
@@ -307,14 +314,16 @@ public fun new_market(collection: &Collection, cap: &CollectionCap, name: String
 }
 
 public fun new_membership(collection: &Collection, cap: &CollectionCap, img_url: String, ctx: &mut TxContext): Membership { 
-  assert!(object::id(collection) == cap.collection_id, ENotOwner);
-  let membership = Membership {
-    id: object::new(ctx),
+  let collection_id = object::id(collection);
+  assert!(collection_id == cap.collection_id, ENotOwner);
+
+  let id = object::new(ctx);
+  event::emit(MembershipCreated { collection_id, id: id.to_inner() });
+  Membership {
+    id,
     `type`: collection.membership_type,
     img_url
-  };
-
-  membership
+  }
 }
 
 public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type_name: String, item_type_name: String, ctx: &mut TxContext): Item { 
@@ -324,7 +333,7 @@ public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type
   let layer_type = dynamic_field::borrow<TypeKey<LayerType>, LayerType>(&collection.id, TypeKey<LayerType>{type_name: layer_type_name});
   assert!(dynamic_field::exists_(&collection.id, TypeKey<ItemType> {type_name: item_type_name}));
 
-  let item_id = object::new(ctx);
+  let id = object::new(ctx);
 
   let img_url_cfg = dynamic_field::borrow<TypeConfigKey<ItemType>, TypeConfig>(&collection.id, TypeConfigKey<ItemType>{type_name: item_type_name, name: b"img_url".to_string()});
   let item_img_url = img_url_cfg.content;
@@ -335,10 +344,10 @@ public fun new_item(collection: &mut Collection, cap: &CollectionCap, layer_type
     type_name: item_type_name
   };
 
-  event::emit(ItemCreated { id: item_id.to_inner() });
+  event::emit(ItemCreated { collection_id, id: id.to_inner() });
 
   Item {
-    id: item_id,
+    id,
     `type`: item_type,
     img_url: item_img_url
   }
@@ -350,18 +359,24 @@ public fun new_attribute_scroll(collection: &Collection, cap: &CollectionCap, ty
 
   let attribute_type = dynamic_field::borrow<TypeKey<AttributeType>, AttributeType>(&collection.id, TypeKey<AttributeType>{type_name});
   let attribute = Attribute {`type`: *attribute_type, value};
+
+  let id = object::new(ctx);
+  event::emit(AttributeScrollCreated { collection_id, id: id.to_inner() });
   AttributeScroll {
-    id: object::new(ctx),
+    id,
     attribute
   }
 }
 
 public fun new_ticket(collection: &Collection, cap: &CollectionCap, type_name: String, ctx: &mut TxContext): Ticket { 
-  assert!(object::id(collection) == cap.collection_id, ENotOwner);
+  let collection_id = object::id(collection);
+  assert!(collection_id == cap.collection_id, ENotOwner);
 
   let ticket_type = dynamic_field::borrow<TypeKey<TicketType>, TicketType>(&collection.id, TypeKey<TicketType>{type_name});
+  let id = object::new(ctx);
+  event::emit(TicketCreated { collection_id, id: id.to_inner() });
   Ticket {
-    id: object::new(ctx),
+    id,
     `type`: *ticket_type
   }
 }
