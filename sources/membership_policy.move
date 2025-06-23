@@ -27,7 +27,7 @@ const ENotEnoughPaid: u64 = 107;
 public struct MembershipPolicy<phantom T: key> has key, store {
   id: UID,
   balance: Balance<SUI>,
-  layer_types: VecSet<TypeName>,
+  layer_order: VecSet<TypeName>,
   version: u16,
 }
 
@@ -167,7 +167,7 @@ public fun new<T: key>(pub: &Publisher, ctx: &mut TxContext): (MembershipPolicy<
       MembershipPolicy<T> { 
         id, 
         balance: balance::zero(),
-        layer_types: vec_set::empty<TypeName>(),
+        layer_order: vec_set::empty<TypeName>(),
         version: 0,
         },
       MembershipPolicyCap<T> { id: object::new(ctx), policy_id },
@@ -374,7 +374,7 @@ public fun register_layer_type<T: key, LayerType: drop, Config: store + copy + d
     assert!(!has_layer<T, LayerType>(policy), ERuleAlreadySet);
 
     let layer_type = type_name::get<LayerType>();
-    policy.layer_types.insert(layer_type);
+    policy.layer_order.insert(layer_type);
     dynamic_field::add(&mut policy.id, RegisterTypeKey<LayerType> {}, cfg);
     policy.update_version_policy();
 }
