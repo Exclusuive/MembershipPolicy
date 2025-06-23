@@ -307,14 +307,14 @@ public fun equip_item_to_membership<T: key, LayerType: drop>(
 
     if (item_socket.socket.is_some()) {
       let old_item = item_socket.socket.extract();
-      store_item_to_item_bag(membership, old_item);
+      insert_item_into_bag(membership, old_item);
     };
 
     item_socket.socket.fill(item);
     dynamic_field::add(&mut membership.id, RegisterTypeKey<LayerType>{}, item_socket);
 }
 
-public fun store_item_to_item_bag<T: key, LayerType: drop>(
+public fun insert_item_into_bag<T: key, LayerType: drop>(
     membership: &mut Membership<T>,
     item: Item<LayerType>,
   ){
@@ -322,7 +322,7 @@ public fun store_item_to_item_bag<T: key, LayerType: drop>(
     item_bag.push_back(item);
 }
 
-public fun retrieve_item_from_item_bag<T: key, LayerType: drop>(
+public fun pop_latest_item_from_bag<T: key, LayerType: drop>(
     membership: &mut Membership<T>,
   ): Item<LayerType>{
     let item_bag = dynamic_field::borrow_mut<ItemBagKey<LayerType>, vector<Item<LayerType>>>(&mut membership.id, ItemBagKey{});
