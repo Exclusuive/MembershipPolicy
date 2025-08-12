@@ -1,84 +1,124 @@
 module exclusuive::membership;
 
-use exclusuive::community::{
-    Community,
-    MembershipType,
-    PartType,
-    Item,
-    TypeKey,
-    get_id,
-    make_type_key,
-    get_part_type
-};
-use std::string::String;
+use exclusuive::community::{Community, has_permission, get_uid, get_mut_uid};
+use std::string::{Self, String};
 use sui::dynamic_field;
+use sui::event::emit;
+
+public struct MembershipType has copy, drop, store {
+    community_id: ID,
+    type_name: String,
+}
 
 public struct Membership has key, store {
     id: UID,
-    `type`: MembershipType,
-    img_url: String,
+    community_id: ID,
+    membership_type: String,
+    image_url: String,
 }
 
-public struct ItemKey<phantom Type: key + store> has copy, drop, store {
+public struct MembershipTypeKey<phantom Type: store + copy + drop> has copy, drop, store {
+    community_id: ID,
     type_name: String,
+}
+
+public struct MembershipMinted has copy, drop {
+    id: ID,
+    membership_type: String,
+    image_url: String,
+}
+
+entry fun mint_membership(
+    community: &Community,
+    type_name: String,
+    image_url: String,
+    receiver: address,
+    ctx: &mut TxContext,
+) {
+    let community_id = object::id(community);
+    assert!(has_permission(community, string::utf8(b"membership_manager"), ctx.sender()));
+    assert!(
+        dynamic_field::exists_(
+            get_uid(community),
+            MembershipTypeKey<MembershipType> { community_id, type_name },
+        ),
+    );
+    let id = object::new(ctx);
+
+    emit(MembershipMinted {
+        id: object::uid_to_inner(&id),
+        membership_type: type_name,
+        image_url,
+    });
+
+    let membership = Membership {
+        id,
+        community_id: object::id(community),
+        membership_type: type_name,
+        image_url,
+    };
+
+    transfer::transfer(membership, receiver)
+}
+
+public fun new_membership_type(community: &mut Community, type_name: String, ctx: &mut TxContext) {
+    let community_id = object::id(community);
+    assert!(has_permission(community, string::utf8(b"membership_manager"), ctx.sender()));
+    assert!(
+        !dynamic_field::exists_(
+            get_uid(community),
+            MembershipTypeKey<MembershipType> { community_id, type_name },
+        ),
+    );
+    dynamic_field::add(
+        get_mut_uid(community),
+        MembershipTypeKey<MembershipType> { community_id, type_name },
+        MembershipType { community_id, type_name },
+    );
+    community.update_version();
 }
 
 public fun new_membership(
     community: &mut Community,
     type_name: String,
-    img_url: String,
+    image_url: String,
     ctx: &mut TxContext,
 ): Membership {
-    let id = object::new(ctx);
-    assert!(dynamic_field::exists_(get_id(community), make_type_key<MembershipType>(type_name)));
-    let membership_type = dynamic_field::borrow<TypeKey<MembershipType>, MembershipType>(
-        get_id(community),
-        make_type_key<MembershipType>(type_name),
+    assert!(has_permission(community, string::utf8(b"membership_manager"), ctx.sender()));
+    assert!(
+        dynamic_field::exists_(
+            get_uid(community),
+            MembershipTypeKey<MembershipType> { community_id: object::id(community), type_name },
+        ),
     );
+    // let membership_type = dynamic_field::borrow<MembershipTypeKey<MembershipType>, MembershipType>(
+    //     get_uid(community),
+    //     MembershipTypeKey<MembershipType> { community_id: object::id(community), type_name },
+    // );
+    let id = object::new(ctx);
+
+    emit(MembershipMinted {
+        id: object::uid_to_inner(&id),
+        membership_type: type_name,
+        image_url,
+    });
+
     Membership {
         id,
-        `type`: *membership_type,
-        img_url,
+        community_id: object::id(community),
+        membership_type: type_name,
+        image_url,
     }
 }
 
-#[allow(lint(self_transfer))]
-public fun equip_item_to_membership(
-    community: &mut Community,
-    membership: &mut Membership,
-    item: Item,
-    ctx: &mut TxContext,
-) {
-    let part_type = get_part_type(&item);
-    assert!(
-        dynamic_field::exists_(
-            get_id(community),
-            make_type_key<PartType>(*part_type),
-        ),
-    );
+public(package) fun get_mut_uid_membership(membership: &mut Membership): &mut UID {
+    &mut membership.id
+}
 
-    if (
-        !dynamic_field::exists_<ItemKey<Item>>(
-            &membership.id,
-            ItemKey<Item> { type_name: *part_type },
-        )
-    ) {
-        dynamic_field::add(
-            &mut membership.id,
-            ItemKey<Item> { type_name: *part_type },
-            item,
-        );
-    } else {
-        let old_item: Item = dynamic_field::remove(
-            &mut membership.id,
-            ItemKey<Item> { type_name: *part_type },
-        );
+public(package) fun get_uid_membership(membership: &Membership): &UID {
+    &membership.id
+}
 
-        dynamic_field::add(
-            &mut membership.id,
-            ItemKey<Item> { type_name: *part_type },
-            item,
-        );
-        transfer::public_transfer(old_item, ctx.sender());
-    };
+public fun get_membership_type(membership: &Membership): String {
+    membership.membership_type
 }
