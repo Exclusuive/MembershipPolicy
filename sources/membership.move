@@ -119,6 +119,10 @@ public(package) fun get_uid_membership(membership: &Membership): &UID {
     &membership.id
 }
 
+public(package) fun community_id(membership: &Membership): ID {
+    membership.community_id
+}
+
 public fun get_membership_type(membership: &Membership): String {
     membership.membership_type
 }
