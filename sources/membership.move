@@ -1,14 +1,20 @@
 module exclusuive::membership;
 
-use exclusuive::community::{Community, has_permission, get_uid, get_mut_uid};
-use std::string::{Self, String};
+use exclusuive::community::{Community, has_permission, get_uid, get_mut_uid, MembershipManager};
+use std::string::String;
 use sui::dynamic_field;
 use sui::event::emit;
 
+const ENotAuthorized: u64 = 2;
+
 public struct MembershipType has copy, drop, store {
     community_id: ID,
+    mode: u8,
     type_name: String,
 }
+
+// mode 0 : Do not allow user to mint membership
+// mode 1 : Allow User to Mint Membership
 
 public struct Membership has key, store {
     id: UID,
@@ -36,13 +42,24 @@ entry fun mint_membership(
     ctx: &mut TxContext,
 ) {
     let community_id = object::id(community);
-    assert!(has_permission(community, string::utf8(b"membership_manager"), ctx.sender()));
     assert!(
         dynamic_field::exists_(
             get_uid(community),
             MembershipTypeKey<MembershipType> { community_id, type_name },
         ),
     );
+
+    let membership_type = dynamic_field::borrow<MembershipTypeKey<MembershipType>, MembershipType>(
+        get_uid(community),
+        MembershipTypeKey<MembershipType> { community_id, type_name },
+    );
+
+    assert!(
+        has_permission<MembershipManager>(community, tx_context::sender(ctx))
+            || membership_type.mode == 1,
+        ENotAuthorized,
+    );
+
     let id = object::new(ctx);
 
     emit(MembershipMinted {
@@ -61,9 +78,14 @@ entry fun mint_membership(
     transfer::transfer(membership, receiver)
 }
 
-public fun new_membership_type(community: &mut Community, type_name: String, ctx: &mut TxContext) {
+public fun new_membership_type(
+    community: &mut Community,
+    type_name: String,
+    mode: u8,
+    ctx: &mut TxContext,
+) {
     let community_id = object::id(community);
-    assert!(has_permission(community, string::utf8(b"membership_manager"), ctx.sender()));
+    assert!(has_permission<MembershipManager>(community, tx_context::sender(ctx)), ENotAuthorized);
     assert!(
         !dynamic_field::exists_(
             get_uid(community),
@@ -73,7 +95,7 @@ public fun new_membership_type(community: &mut Community, type_name: String, ctx
     dynamic_field::add(
         get_mut_uid(community),
         MembershipTypeKey<MembershipType> { community_id, type_name },
-        MembershipType { community_id, type_name },
+        MembershipType { community_id, type_name, mode },
     );
     community.update_version();
 }
@@ -84,17 +106,25 @@ public fun new_membership(
     image_url: String,
     ctx: &mut TxContext,
 ): Membership {
-    assert!(has_permission(community, string::utf8(b"membership_manager"), ctx.sender()));
     assert!(
         dynamic_field::exists_(
             get_uid(community),
             MembershipTypeKey<MembershipType> { community_id: object::id(community), type_name },
         ),
     );
-    // let membership_type = dynamic_field::borrow<MembershipTypeKey<MembershipType>, MembershipType>(
-    //     get_uid(community),
-    //     MembershipTypeKey<MembershipType> { community_id: object::id(community), type_name },
-    // );
+    let membership_type = dynamic_field::borrow<MembershipTypeKey<MembershipType>, MembershipType>(
+        get_uid(community),
+        MembershipTypeKey<MembershipType> {
+            community_id: object::id(community),
+            type_name,
+        },
+    );
+
+    assert!(
+        has_permission<MembershipManager>(community, tx_context::sender(ctx))
+            || membership_type.mode == 1,
+        ENotAuthorized,
+    );
     let id = object::new(ctx);
 
     emit(MembershipMinted {

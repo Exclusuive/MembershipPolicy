@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # 🧪 패키지 ID와 모듈명
-PACKAGE_ID=0x11529eb37254d54d3903714d63daa655559bbf5ddae2c73fd35cdaed7e1e863a
+PACKAGE_ID=0xb5e7b979e1caffb00bc6a8dfcbdafa230f3b31a4aa54377a26d7739a255c0a34
 ITEM_MODULE=item
 COMMUNITY_MODULE=community
 RECEIVER=0xd5726993ab71c2daa0309ecf30c4c40b59b80479b69ff95336a88ff60f9596aa
-COMMUNITY=0xdfa768536bcda624c6daa0224806a6b8f60f983705664484819d5fd0e9afe865
-COMMUNITY_CAP=0xbb564349cf7aa11a4e904478cfab3f09b519ce6b2651ddcdbe612276d523a412
+COMMUNITY=0xaf550af908b1acb9496d29d27b2985a4614a41c60b27e6d8d0ee8c85aa91a8eb
+COMMUNITY_CAP=0x3f2075b6bbeeba08837773ad4ebae52893bd3609acd050b2b2327f3da342e2ab
 
 # 🎯 커뮤니티 생성
 echo "🚀 Testing Community"
@@ -23,7 +23,7 @@ echo "🚀 Register item type with permission (Should fail)"
 sui client call  --package $PACKAGE_ID --module $ITEM_MODULE --function new_item_type --args $COMMUNITY '"TEST"' '"TEST_SLOT"' '"TEST_ITEM"' '"TEST_IMAGE_URL"'
 
 echo "🚀 Grant permission (Should pass)"
-sui client call  --package $PACKAGE_ID --module $COMMUNITY_MODULE --function grant_permission --args $COMMUNITY $COMMUNITY_CAP '"item_manager"' $RECEIVER
+sui client call  --package $PACKAGE_ID --module $COMMUNITY_MODULE --function grant_permission --type-args $PACKAGE_ID::$COMMUNITY_MODULE::ItemManager --args $COMMUNITY $COMMUNITY_CAP $RECEIVER
 
 
 

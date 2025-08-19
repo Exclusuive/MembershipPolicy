@@ -1,14 +1,17 @@
 module exclusuive::item;
 
-use exclusuive::community::{Community, get_uid, get_mut_uid, has_permission};
+use exclusuive::community::{Community, get_uid, get_mut_uid, has_permission, ItemManager};
 use exclusuive::membership::{
     Membership,
     get_membership_type,
     get_mut_uid_membership,
     get_uid_membership
 };
-use std::string::{Self, String};
+use std::string::String;
 use sui::dynamic_field;
+use sui::dynamic_object_field;
+
+const ENotAuthorized: u64 = 2;
 
 public struct SlotType has copy, drop, store {
     community_id: ID,
@@ -78,7 +81,7 @@ public fun new_slot_type(
     ctx: &mut TxContext,
 ) {
     let community_id = object::id(community);
-    assert!(has_permission(community, string::utf8(b"item_manager"), ctx.sender()));
+    assert!(has_permission<ItemManager>(community, tx_context::sender(ctx)), ENotAuthorized);
     assert!(
         !dynamic_field::exists_(
             get_uid(community),
@@ -102,7 +105,7 @@ public fun new_item_type(
     ctx: &mut TxContext,
 ) {
     let community_id = object::id(community);
-    assert!(has_permission(community, string::utf8(b"item_manager"), ctx.sender()));
+    assert!(has_permission<ItemManager>(community, tx_context::sender(ctx)), ENotAuthorized);
     assert!(
         dynamic_field::exists_(
             get_uid(community),
@@ -129,7 +132,7 @@ public fun new_trait_type(
     ctx: &mut TxContext,
 ) {
     let community_id = object::id(community);
-    assert!(has_permission(community, string::utf8(b"item_manager"), ctx.sender()));
+    assert!(has_permission<ItemManager>(community, tx_context::sender(ctx)), ENotAuthorized);
     assert!(
         !dynamic_field::exists_(
             get_uid(community),
@@ -152,7 +155,7 @@ public fun new_item(
     ctx: &mut TxContext,
 ): Item {
     let community_id = object::id(community);
-    assert!(has_permission(community, string::utf8(b"item_manager"), ctx.sender()));
+    assert!(has_permission<ItemManager>(community, tx_context::sender(ctx)), ENotAuthorized);
     let item_type: &mut ItemType = dynamic_field::borrow_mut(
         get_mut_uid(community),
         ItemTypeKey<ItemType> { community_id, membership_type, slot_name, item_name },
@@ -176,7 +179,7 @@ public fun new_trait(
     ctx: &mut TxContext,
 ): Trait {
     let community_id = object::id(community);
-    assert!(has_permission(community, string::utf8(b"item_manager"), ctx.sender()));
+    assert!(has_permission<ItemManager>(community, tx_context::sender(ctx)), ENotAuthorized);
     assert!(
         dynamic_field::exists_(
             get_uid(community),
@@ -192,10 +195,14 @@ public fun new_trait(
 }
 
 public fun attach_trait_to_item(community: &mut Community, item: &mut Item, trait: Trait) {
+    let community_id = object::id(community);
+    assert!(community_id == item.community_id);
+    assert!(trait.community_id == community_id);
+
     dynamic_field::add(
         &mut item.id,
         TraitTypeKey<TraitType> {
-            community_id: object::id(community),
+            community_id,
             membership_type: item.membership_type,
             trait_name: trait.trait_name,
         },
@@ -213,7 +220,7 @@ public fun equip_item_to_membership(
     let mt = get_membership_type(membership);
 
     if (
-        !dynamic_field::exists_<ItemKey<Item>>(
+        !dynamic_object_field::exists_<ItemKey<Item>>(
             get_uid_membership(membership),
             ItemKey<Item> {
                 community_id: object::id(community),
@@ -222,7 +229,7 @@ public fun equip_item_to_membership(
             },
         )
     ) {
-        dynamic_field::add(
+        dynamic_object_field::add(
             get_mut_uid_membership(membership),
             ItemKey<Item> {
                 community_id: object::id(community),
@@ -232,7 +239,7 @@ public fun equip_item_to_membership(
             item,
         );
     } else {
-        let old_item: Item = dynamic_field::remove(
+        let old_item: Item = dynamic_object_field::remove(
             get_mut_uid_membership(membership),
             ItemKey<Item> {
                 community_id: object::id(community),
@@ -241,7 +248,7 @@ public fun equip_item_to_membership(
             },
         );
 
-        dynamic_field::add(
+        dynamic_object_field::add(
             get_mut_uid_membership(membership),
             ItemKey<Item> {
                 community_id: object::id(community),
@@ -263,7 +270,7 @@ public fun unequip_item_from_membership(
 ) {
     let mt = get_membership_type(membership);
     assert!(
-        dynamic_field::exists_(
+        dynamic_object_field::exists_(
             get_mut_uid_membership(membership),
             ItemKey<Item> {
                 community_id: object::id(community),
@@ -272,7 +279,7 @@ public fun unequip_item_from_membership(
             },
         ),
     );
-    let item: Item = dynamic_field::remove(
+    let item: Item = dynamic_object_field::remove(
         get_mut_uid_membership(membership),
         ItemKey<Item> {
             community_id: object::id(community),
