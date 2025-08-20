@@ -38,7 +38,7 @@ sui client ptb \
   --move-call $PACKAGE_ID::item::new_trait @$COMMUNITY '"TEST"' '"TEST_TRAIT"' 16 \
   --assign TRAIT \
   --move-call $PACKAGE_ID::item::attach_trait_to_item @$COMMUNITY ITEM TRAIT \
-  --transfer-objects "["MEMBERSHIP", "ITEM"]" @$RECEIVER
+  --transfer-objects "["MEMBERSHIP", "ITEM"]" @$RECEIVER 
 
 
 

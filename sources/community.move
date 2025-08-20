@@ -32,6 +32,7 @@ public struct CommunityManager has copy, drop, store {}
 public struct ItemManager has copy, drop, store {}
 public struct MembershipManager has copy, drop, store {}
 public struct MissionManager has copy, drop, store {}
+public struct MarketManager has copy, drop, store {}
 
 public struct TypeKey<phantom Type: store + copy + drop> has copy, drop, store {
     type_name: String,

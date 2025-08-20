@@ -1,9 +1,9 @@
 module exclusuive::item;
 
 use exclusuive::community::{Community, get_uid, get_mut_uid, has_permission, ItemManager};
-use exclusuive::membership::{
+use exclusuive::exclusuive_membership::{
     Membership,
-    get_membership_type,
+    get_membership_name,
     get_mut_uid_membership,
     get_uid_membership
 };
@@ -217,7 +217,7 @@ public fun equip_item_to_membership(
     item: Item,
     ctx: &mut TxContext,
 ) {
-    let mt = get_membership_type(membership);
+    let mt = get_membership_name(membership);
 
     if (
         !dynamic_object_field::exists_<ItemKey<Item>>(
@@ -268,7 +268,7 @@ public fun unequip_item_from_membership(
     slot_name: String,
     ctx: &mut TxContext,
 ) {
-    let mt = get_membership_type(membership);
+    let mt = get_membership_name(membership);
     assert!(
         dynamic_object_field::exists_(
             get_mut_uid_membership(membership),

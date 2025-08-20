@@ -1,107 +1,226 @@
 module exclusuive::payment;
 
-use exclusuive::community::{Community};
-use exclusuive::membership::{Membership};
-use exclusuive::item::{Item};
-use std::string::{Self, String};
+use exclusuive::community::{Community, has_permission, MarketManager};
+use exclusuive::exclusuive_membership::{Membership, get_mut_uid_membership, get_membership_name};
+use std::string::String;
 use sui::balance::{Self, Balance};
+use sui::dynamic_field;
 use sui::sui::SUI;
-use sui::coin::Coin;
 
 public struct Market has key, store {
-  id: UID,
-  community_id: ID,
-  listings: vector<Listing>,
-  balance: Balance<SUI>,
+    id: UID,
+    community_id: ID,
+    balance: Balance<SUI>,
 }
 
-public struct MarketCap has key, store {
-  id: UID,
-  market_id: ID
+public struct MembershipPolicy has copy, drop, store {
+    community_id: ID,
+    membership_name: String,
+    discount_rate: u64,
+    reward_ticket: String,
+    reward_value: u64,
+    is_active: bool,
 }
 
-public struct Listing has store {
-  number: u64,
-  price: u64,
-  item: Item
+const ENotAuthorized: u64 = 1;
+
+public struct MembershipPolicyKey<phantom Type: store + copy + drop> has copy, drop, store {
+    community_id: ID,
+    membership_name: String,
 }
 
-public fun list(
-    community: &Community,
-    market: &mut Market,
-    cap: &MarketCap,
-    item: Item,
-    price: u64
-) {
+public struct TicketType has copy, drop, store {
+    community_id: ID,
+    ticket_name: String,
+}
+
+public struct TicketTypeKey<phantom Type: store + copy + drop> has copy, drop, store {
+    community_id: ID,
+    ticket_name: String,
+}
+
+public struct Ticket has store {
+    name: String,
+    value: u64,
+}
+
+public fun new_market(community: &mut Community, ctx: &mut TxContext) {
     let community_id = object::id(community);
-    assert!(community_id == market.community_id);
-    let market_id = object::id(market);
-    assert!(market_id == cap.market_id);
+    assert!(has_permission<MarketManager>(community, tx_context::sender(ctx)), ENotAuthorized);
 
-    let new_listing = Listing {
-      number: market.listings.length(),
-      price,
-      item
+    let market = Market {
+        id: object::new(ctx),
+        community_id,
+        balance: balance::zero(),
     };
-    market.listings.push_back(new_listing)
+
+    transfer::share_object(market);
 }
 
-#[allow(lint(self_transfer))]
-public fun delist(
-    community: &Community,
+public fun new_ticket_type(
+    community: &mut Community,
     market: &mut Market,
-    cap: &MarketCap,
-    list_number: u64,
-    ctx: &mut TxContext
+    ticket_name: String,
+    ctx: &mut TxContext,
 ) {
     let community_id = object::id(community);
-    assert!(community_id == market.community_id);
-    let market_id = object::id(market);
-    assert!(market_id == cap.market_id);
-
-    let listing = market.listings.remove(list_number);
-    let Listing{number: _, price: _, item} = listing;
-    transfer::public_transfer(item, ctx.sender());
+    assert!(has_permission<MarketManager>(community, tx_context::sender(ctx)), ENotAuthorized);
+    assert!(
+        !dynamic_field::exists_(
+            &market.id,
+            TicketTypeKey<TicketType> { community_id, ticket_name },
+        ),
+    );
+    dynamic_field::add(
+        &mut market.id,
+        TicketTypeKey<TicketType> { community_id, ticket_name },
+        TicketType { community_id, ticket_name },
+    );
 }
 
-#[allow(lint(self_transfer))]
-public fun purchase_with_membership(
-    community: &Community,
+public fun new_membership_policy(
+    community: &mut Community,
     market: &mut Market,
-    membership: &Membership,
-    list_number: u64,
-    ctx: &mut TxContext
+    membership_name: String,
+    discount_rate: u64,
+    reward_ticket: String,
+    reward_value: u64,
+    is_active: bool,
+    ctx: &mut TxContext,
 ) {
     let community_id = object::id(community);
-    assert!(community_id == market.community_id);
-    assert!(community_id == membership.community_id());
+    assert!(has_permission<MarketManager>(community, tx_context::sender(ctx)), ENotAuthorized);
+    assert!(
+        !dynamic_field::exists_(
+            &market.id,
+            MembershipPolicyKey<MembershipPolicy> { community_id, membership_name },
+        ),
+    );
 
-    let listing = market.listings.remove(list_number);
-    let Listing{number: _, price, item} = listing;
-
-    // price 대신 꽁짜
-    // let price_balance = payment.split<SUI>(price);
-    // market.balance.join(price_balance);
-    transfer::public_transfer(item, ctx.sender());
-
-
+    // check if reward_ticket is a valid ticket type
+    if (reward_ticket != b"".to_string()) {
+        assert!(
+            dynamic_field::exists_(
+                &market.id,
+                TicketTypeKey<TicketType> { community_id, ticket_name: reward_ticket },
+            ),
+        );
+    };
+    dynamic_field::add(
+        &mut market.id,
+        MembershipPolicyKey<MembershipPolicy> { community_id, membership_name },
+        MembershipPolicy {
+            community_id,
+            membership_name,
+            discount_rate,
+            reward_ticket,
+            reward_value,
+            is_active,
+        },
+    );
 }
 
-#[allow(lint(self_transfer))]
-public fun purchase(
-    community: &Community,
+public fun update_membership_policy(
+    community: &mut Community,
     market: &mut Market,
-    list_number: u64,
+    membership_name: String,
+    discount_rate: u64,
+    reward_ticket: String,
+    reward_value: u64,
+    is_active: bool,
+    ctx: &mut TxContext,
+) {
+    let community_id = object::id(community);
+    assert!(has_permission<MarketManager>(community, tx_context::sender(ctx)), ENotAuthorized);
+    assert!(
+        dynamic_field::exists_(
+            &market.id,
+            MembershipPolicyKey<MembershipPolicy> { community_id, membership_name },
+        ),
+    );
+    assert!(
+        dynamic_field::exists_(
+            &market.id,
+            TicketTypeKey<TicketType> { community_id, ticket_name: reward_ticket },
+        ),
+    );
+    let policy = dynamic_field::borrow_mut<MembershipPolicyKey<MembershipPolicy>, MembershipPolicy>(
+        &mut market.id,
+        MembershipPolicyKey<MembershipPolicy> { community_id, membership_name },
+    );
+
+    policy.discount_rate = discount_rate;
+    policy.reward_ticket = reward_ticket;
+    policy.reward_value = reward_value;
+    policy.is_active = is_active;
+}
+
+public fun process_payment_without_membership(
+    market: &mut Market,
     payment: &mut Balance<SUI>,
-    ctx: &mut TxContext
+    price: u64,
 ) {
-    let community_id = object::id(community);
-    assert!(community_id == market.community_id);
-
-    let listing = market.listings.remove(list_number);
-    let Listing{number: _, price, item} = listing;
-
     let price_balance = payment.split<SUI>(price);
     market.balance.join(price_balance);
-    transfer::public_transfer(item, ctx.sender());
+}
+
+public fun process_payment_with_membership(
+    community: &mut Community,
+    market: &mut Market,
+    payment: &mut Balance<SUI>,
+    price: u64,
+    membership: &mut Membership,
+) {
+    let community_id = object::id(community);
+
+    let membership_name = get_membership_name(membership);
+    assert!(
+        dynamic_field::exists_(
+            &market.id,
+            MembershipPolicyKey<MembershipPolicy> { community_id, membership_name },
+        ),
+    );
+    let policy = dynamic_field::borrow<MembershipPolicyKey<MembershipPolicy>, MembershipPolicy>(
+        &market.id,
+        MembershipPolicyKey<MembershipPolicy> { community_id, membership_name },
+    );
+
+    if (policy.is_active) {
+        let discount_rate = policy.discount_rate;
+        let reward_ticket = policy.reward_ticket;
+        let reward_value = policy.reward_value;
+
+        if (reward_ticket != b"".to_string()) {
+            if (
+                dynamic_field::exists_(
+                    get_mut_uid_membership(membership),
+                    TicketTypeKey<TicketType> { community_id, ticket_name: reward_ticket },
+                )
+            ) {
+                let ticket = dynamic_field::borrow_mut<TicketTypeKey<TicketType>, Ticket>(
+                    get_mut_uid_membership(membership),
+                    TicketTypeKey<TicketType> { community_id, ticket_name: reward_ticket },
+                );
+                ticket.value = ticket.value + reward_value;
+            } else {
+                let ticket = Ticket {
+                    name: reward_ticket,
+                    value: reward_value,
+                };
+                dynamic_field::add(
+                    get_mut_uid_membership(membership),
+                    TicketTypeKey<TicketType> { community_id, ticket_name: reward_ticket },
+                    ticket,
+                );
+            };
+        };
+        if (discount_rate > 0) {
+            let discount_price = price * (10000 - discount_rate) / 10000;
+            let discount_balance = payment.split<SUI>(discount_price);
+            market.balance.join(discount_balance);
+        };
+    } else {
+        let price_balance = payment.split<SUI>(price);
+        market.balance.join(price_balance);
+    }
 }
