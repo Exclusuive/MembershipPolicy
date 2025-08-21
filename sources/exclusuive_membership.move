@@ -216,7 +216,7 @@ public fun new_membership(
     }
 }
 
-entry fun mint_membership(
+public fun mint_membership(
     community: &mut Community,
     membership_name: String,
     image_url: String,
